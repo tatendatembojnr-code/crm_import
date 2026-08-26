@@ -22,13 +22,11 @@ if not uid:
     print("Authentication failed!")
     exit()
 
-print("Wiping all existing CRM Leads and To-Dos...")
+print("Connecting to database for incremental update...")
 conn = psycopg2.connect("dbname='havano_test' user='odoo' password='odoo' host='127.0.0.1' port='5432'")
 conn.autocommit = True
 cur = conn.cursor()
-cur.execute("DELETE FROM todo_task;")
-cur.execute("DELETE FROM mail_message WHERE model='crm.lead';")
-cur.execute("DELETE FROM crm_lead;")
+# Wiping statements removed to preserve existing data and support incremental updates
 
 def safe_date(value):
     if not value or str(value).strip() == '': return False
@@ -102,7 +100,13 @@ def get_or_create_product(prod_name):
     return prod_id
 
 print("Reading ALL Leads WITH A PRODUCT from Lead.csv...")
-lead_csv = r'C:\Users\DELL\Desktop\odoo\data_import\Lead.csv'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'data_import'))
+
+lead_csv = sys.argv[1] if len(sys.argv) > 1 else os.path.join(DEFAULT_DATA_DIR, 'Lead.csv')
+if not os.path.exists(lead_csv) and os.path.exists(r'C:\Users\DELL\Desktop\odoo\data_import\Lead.csv'):
+    lead_csv = r'C:\Users\DELL\Desktop\odoo\data_import\Lead.csv'
+
 lead_vals_list = []
 imported_lead_ids = []
 import_id_to_real_id = {}
@@ -184,7 +188,9 @@ conn.commit()
 
 # --- To-Dos ---
 print("Reading corresponding To-Dos from ToDo.csv...")
-todo_csv = r'C:\Users\DELL\Desktop\odoo\data_import\ToDo.csv'
+todo_csv = sys.argv[2] if len(sys.argv) > 2 else os.path.join(DEFAULT_DATA_DIR, 'ToDo.csv')
+if not os.path.exists(todo_csv) and os.path.exists(r'C:\Users\DELL\Desktop\odoo\data_import\ToDo.csv'):
+    todo_csv = r'C:\Users\DELL\Desktop\odoo\data_import\ToDo.csv'
 
 act_type_id = models.execute_kw(db, uid, password, 'mail.activity.type', 'search', [[]], {'limit': 1})[0]
 model_id = models.execute_kw(db, uid, password, 'ir.model', 'search', [[('model', '=', 'crm.lead')]], {'limit': 1})[0]
