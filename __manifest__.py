@@ -1,16 +1,17 @@
 {
-    'name': 'CRM Extension',
+    'name': 'CRM Import',
     'version': '1.0',
     'category': 'Sales/CRM',
-    'summary': 'Extends CRM Lead with custom fields for data import',
+    'summary': 'Clean, fast UI Wizard to import Users, Leads, and To-Dos from CSV.',
     'description': """
-        This module extends the standard CRM Lead/Opportunity model 
-        to add custom fields required for migrating data from the old system.
+        This module provides a UI wizard to import data from legacy systems.
+        It defines custom fields to preserve data integrity and includes logic
+        to skip existing records for speed.
     """,
     'depends': ['crm'],
     'data': [
         'security/ir.model.access.csv',
-        'wizard/data_import_wizard_views.xml',
+        'wizard/crm_import_wizard_views.xml',
         'views/todo_task_views.xml',
         'views/crm_lead_views.xml',
     ],

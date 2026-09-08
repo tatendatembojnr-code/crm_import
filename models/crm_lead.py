@@ -161,12 +161,12 @@ class CrmLead(models.Model):
                         # Extract inner note text if available
                         inner_match = re.search(r'</div>\s*<div>(.*)', m.body, re.DOTALL)
                         if inner_match:
-                            inner_text = html.unescape(re.sub(r'<[^>]+>', ' ', inner_match.group(1))).strip()
+                            inner_text = re.sub(r'<[^>]+>', ' ', html.unescape(inner_match.group(1))).strip()
                             inner_text = re.sub(r'\s+', ' ', inner_text).strip()
                         else:
                             inner_text = ''
                         
-                        clean_text = html.unescape(re.sub(r'<[^>]+>', ' ', m.body)).strip()
+                        clean_text = re.sub(r'<[^>]+>', ' ', html.unescape(m.body)).strip()
                         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
                         
                         # Strip standard To-Do boilerplate if present
@@ -182,7 +182,7 @@ class CrmLead(models.Model):
             
             if record.activity_ids:
                 for a in record.activity_ids:
-                    cleaned_note = (html.unescape(re.sub(r'<[^>]+>', ' ', a.note or '')).strip() if a.note else '')
+                    cleaned_note = (re.sub(r'<[^>]+>', ' ', html.unescape(a.note or '')).strip() if a.note else '')
                     cleaned_note = re.sub(r'\s+', ' ', cleaned_note).strip()
                     summary_text = re.sub(r'\s+', ' ', a.summary or '').strip()
                     
@@ -198,7 +198,7 @@ class CrmLead(models.Model):
 
             if record.todo_ids:
                 for t in record.todo_ids:
-                    todo_desc = (html.unescape(re.sub(r'<[^>]+>', ' ', t.description or '')).strip() if t.description else '')
+                    todo_desc = (re.sub(r'<[^>]+>', ' ', html.unescape(t.description or '')).strip() if t.description else '')
                     todo_desc = re.sub(r'\s+', ' ', todo_desc).strip()
                     todo_name = re.sub(r'\s+', ' ', str(t.name or '')).strip()
                     if todo_desc and (not todo_name or (todo_name.startswith('T') and todo_name[1:].isdigit()) or len(todo_name) <= 12):

@@ -1,1 +1,1 @@
-from . import data_import_wizard
+from . import crm_import_wizard
