@@ -9,8 +9,8 @@ import time
 print("--- INITIALIZING UNLIMITED LEADS IMPORT ---")
 global_start = time.time()
 
-url = 'http://localhost:8069'
-db = 'havano_test'
+url = 'http://127.0.0.1:9060'
+db = 'showline_s2_havano_pro_xcynznxmwcotukbxkm'
 username = 'admin'
 password = 'admin'
 
@@ -23,7 +23,7 @@ if not uid:
     exit()
 
 print("Connecting to database for incremental update...")
-conn = psycopg2.connect("dbname='havano_test' user='odoo' password='odoo' host='127.0.0.1' port='5432'")
+conn = psycopg2.connect(dbname="showline_s2_havano_pro_xcynznxmwcotukbxkm", user="Showline", password="Showline@#$1234", host="192.168.112.2", port="5432")
 conn.autocommit = True
 cur = conn.cursor()
 # Wiping statements removed to preserve existing data and support incremental updates
@@ -124,8 +124,6 @@ with open(lead_csv, mode='r', encoding='utf-8', errors='ignore') as f:
         if len(row) < 50 or not row[1].strip(): continue
         
         product = row[4].strip().strip('"') if row[4] else False
-        if not product:
-            continue # We only want leads that have products
         
         import_id = row[1].strip().strip('"')
         
@@ -195,6 +193,13 @@ if not os.path.exists(todo_csv) and os.path.exists(r'C:\Users\DELL\Desktop\odoo\
 act_type_id = models.execute_kw(db, uid, password, 'mail.activity.type', 'search', [[]], {'limit': 1})[0]
 model_id = models.execute_kw(db, uid, password, 'ir.model', 'search', [[('model', '=', 'crm.lead')]], {'limit': 1})[0]
 
+# Preload existing open activities and chatter notes to guarantee ZERO duplicates
+cur.execute("SELECT res_id, summary FROM mail_activity WHERE res_model = 'crm.lead' AND summary IS NOT NULL;")
+existing_open_activities = set((r[0], str(r[1]).strip()) for r in cur.fetchall())
+
+cur.execute("SELECT res_id, body FROM mail_message WHERE model = 'crm.lead';")
+existing_chatter_notes = set((r[0], str(r[1]).strip()) for r in cur.fetchall() if r[1])
+
 linked_todos_count = 0
 open_activities_vals = []
 closed_activities_vals = []
@@ -207,13 +212,12 @@ with open(todo_csv, mode='r', encoding='utf-8', errors='ignore') as f:
     for row in reader:
         todo_count += 1
         if todo_count % 1000 == 0:
-            print(f"Scanned {todo_count} rows in ToDo.csv...", end='\\r', flush=True)
+            print(f"Scanned {todo_count} rows in ToDo.csv...", end='\r', flush=True)
             
         if len(row) < 13 or not row[1].strip(): continue
         ref_name = row[12].strip().strip('"')
         
         if ref_name in import_id_to_real_id:
-            linked_todos_count += 1
             real_lead_id = import_id_to_real_id[ref_name]
             status = str(row[6]).strip().strip('"').capitalize() if row[6] else 'Open'
             date_str = safe_date(row[2])
@@ -238,9 +242,19 @@ with open(todo_csv, mode='r', encoding='utf-8', errors='ignore') as f:
             }
             
             if status in ['Closed', 'Cancelled', 'Done']:
+                note_html = f"<div>{note}</div>" if note else ""
+                body = f"<div><p><span class='fa fa-check fa-fw'></span><span>To-Do</span> done <span>: </span><span>{summary}</span></p>{note_html}</div>"
+                if (real_lead_id, body) in existing_chatter_notes:
+                    continue
+                existing_chatter_notes.add((real_lead_id, body))
                 closed_activities_vals.append(act_vals)
+                linked_todos_count += 1
             else:
+                if (real_lead_id, summary) in existing_open_activities:
+                    continue
+                existing_open_activities.add((real_lead_id, summary))
                 open_activities_vals.append(act_vals)
+                linked_todos_count += 1
 
 print(f"\\nFound {linked_todos_count} To-Dos for these leads. Mapping to Native Odoo Activities...")
 
@@ -283,12 +297,12 @@ if closed_activities_vals:
                     date_time_str = f"{legacy_date_str} 10:00:00"
             
             flat_vals.extend([
-                act['res_model_id'], act['res_id'], act['activity_type_id'], act['user_id'],
+                'crm.lead', act['res_model_id'], act['res_id'], act['activity_type_id'], act['user_id'],
                 act['summary'], act['note'], date_time_str, date_time_str, date_time_str
             ])
             
         try:
-            cur.execute(f"INSERT INTO mail_activity (res_model_id, res_id, activity_type_id, user_id, summary, note, date_deadline, active, create_date, date_done) VALUES {format_strings} RETURNING id", flat_vals)
+            cur.execute(f"INSERT INTO mail_activity (res_model, res_model_id, res_id, activity_type_id, user_id, summary, note, date_deadline, active, create_date, date_done) VALUES {format_strings} RETURNING id", flat_vals)
             inserted_ids = [row[0] for row in cur.fetchall()]
             act_ids.extend(inserted_ids)
         except Exception as e:
@@ -340,7 +354,7 @@ conn.close()
 
 print("\nRunning Sequencing script so the No. column populates...")
 try:
-    subprocess.run(["python", "custom-addons/crm_extension/scripts/sequence_leads.py"], cwd=r'c:\Users\DELL\Desktop\odoo')
+    subprocess.run([sys.executable, os.path.join(SCRIPT_DIR, "sequence_leads.py")])
 except Exception as e:
     print(f"Sequencing failed: {e}")
 

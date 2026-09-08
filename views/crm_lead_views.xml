@@ -15,47 +15,42 @@
 
             <!-- Place our unified 3-column details directly in the main form area before the tabs -->
             <xpath expr="//notebook" position="before">
-                <div class="row mt-3 mb-3">
+                <group col="3">
                     <!-- Column 1: Contact & Basic Info -->
-                    <div class="col-md-4">
-                        <group>
-                            <field name="contact_name" string="First Name"/>
-                            <field name="partner_name" string="Organization/Store Name"/>
-                            <field name="email_from" string="Email"/>
-                            <field name="phone" string="Phone"/>
-                            <field name="website" string="Website"/>
-                            <field name="source_id" string="Source"/>
-                            <field name="product_id" string="Product Interest"/>
-                        </group>
-                    </div>
+                    <group string="Contact &amp; Basic Info">
+                        <field name="contact_name" string="First Name"/>
+                        <field name="partner_name" string="Organization/Store Name"/>
+                        <field name="email_from" string="Email"/>
+                        <field name="phone" string="Phone"/>
+                        <field name="website" string="Website"/>
+                        <field name="source_id" string="Source"/>
+                        <field name="product_id" string="Product Interest"/>
+                    </group>
                     
                     <!-- Column 2: Deal & Sales Info -->
-                    <div class="col-md-4">
-                        <group>
-                            <field name="user_id" string="Salesperson"/>
-                            <field name="team_id" string="Sales Team"/>
-                            <field name="priority" widget="priority"/>
-                            <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color', 'no_create_edit': True}"/>
-                            <field name="custom_deal_size" string="Deal Size $"/>
-                            <field name="custom_quote" string="Quote"/>
-                            <field name="custom_quote_date" string="Quote Date"/>
-                            <field name="custom_proposal_status" string="Proposal"/>
-                            <field name="custom_proposal_date" string="Proposal Date"/>
-                        </group>
-                    </div>
+                    <group string="Deal &amp; Sales Info">
+                        <field name="user_id" string="Salesperson"/>
+                        <field name="team_id" string="Sales Team"/>
+                        <field name="priority" widget="priority"/>
+                        <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color', 'no_create_edit': True}"/>
+                        <field name="last_chatter" string="Last Chatter" readonly="1"/>
+                        <field name="custom_deal_size" string="Deal Size $"/>
+                        <field name="custom_quote" string="Quote"/>
+                        <field name="custom_quote_date" string="Quote Date"/>
+                        <field name="custom_proposal_status" string="Proposal"/>
+                        <field name="custom_proposal_date" string="Proposal Date"/>
+                    </group>
 
                     <!-- Column 3: Address & Additional Info -->
-                    <div class="col-md-4">
-                        <group>
-                            <field name="city" string="City/Town"/>
-                            <field name="street" string="Full Address"/>
-                            <field name="custom_technician" string="Technician"/>
-                            <field name="custom_type_of_business" string="Type of Business"/>
-                            <field name="custom_demo_done" string="Demo Done"/>
-                            <field name="custom_demo_type" string="Demo Done Online/Onsite" invisible="custom_demo_done == False"/>
-                        </group>
-                    </div>
-                </div>
+                    <group string="Address &amp; Additional Info">
+                        <field name="city" string="City/Town"/>
+                        <field name="street" string="Full Address"/>
+                        <field name="custom_technician" string="Technician"/>
+                        <field name="custom_type_of_business" string="Type of Business"/>
+                        <field name="custom_demo_done" string="Demo Done"/>
+                        <field name="custom_demo_type" string="Demo Done Online/Onsite" invisible="custom_demo_done == False"/>
+                    </group>
+                </group>
             </xpath>
 
             <!-- Hide the extra information tab to keep the UI clean and prevent repetition -->
@@ -63,32 +58,18 @@
                 <attribute name="invisible">1</attribute>
             </xpath>
 
-            <!-- Show original todo_ids under Activities tab with column toggling enabled -->
-            <xpath expr="//notebook" position="inside">
-                <page string="Activities &amp; To-Dos" name="imported_todos">
-                    <field name="todo_ids">
-                        <list string="To-Dos" editable="bottom">
-                            <field name="name" string="Subject"/>
-                            <field name="status" optional="show"/>
-                            <field name="date" optional="show"/>
-                            <field name="allocated_to" optional="show"/>
-                            <field name="legacy_create_date" string="Original Creation Date" optional="show"/>
-                        </list>
-                    </field>
-                </page>
-            </xpath>
-
         </field>
     </record>
 
-    <!-- Tree / List View Extension to show Last To-Do Note & Product Interest -->
+    <!-- Tree / List View Extension to show Last Chatter, Deadline & Product Interest -->
     <record id="crm_lead_view_tree_inherit_custom" model="ir.ui.view">
         <field name="name">crm.lead.tree.inherit.custom</field>
         <field name="model">crm.lead</field>
         <field name="inherit_id" ref="crm.crm_case_tree_view_leads"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
-                <field name="last_todo_note" string="Last To-Do / Note" optional="show"/>
+                <field name="last_chatter" string="Last Chatter" optional="show"/>
+                <field name="date_deadline" string="Deadline" optional="show"/>
                 <field name="product_id" string="Product Interest" optional="show"/>
             </xpath>
         </field>
@@ -101,8 +82,17 @@
         <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
-                <field name="last_todo_note" string="Last To-Do / Note" optional="show"/>
                 <field name="product_id" string="Product Interest" optional="show"/>
+            </xpath>
+            <xpath expr="//field[@name='activity_ids']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//field[@name='activity_ids']" position="after">
+                <field name="last_chatter" string="Activities" optional="show"/>
+            </xpath>
+            <xpath expr="//field[@name='date_deadline']" position="attributes">
+                <attribute name="optional">show</attribute>
+                <attribute name="string">Deadline</attribute>
             </xpath>
         </field>
     </record>
