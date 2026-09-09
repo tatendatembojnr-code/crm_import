@@ -96,4 +96,64 @@
             </xpath>
         </field>
     </record>
+
+    <!-- Inherit Search Filter for Opportunities: Add Deadline Filters -->
+    <record id="crm_lead_view_search_inherit_custom_deadlines" model="ir.ui.view">
+        <field name="name">crm.lead.search.inherit.custom.deadlines</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='assigned_to_me']" position="after">
+                <separator/>
+                <!-- User Deadline Filters -->
+                <filter string="My Deadline: Today" name="my_deadline_today"
+                        domain="[('my_activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter string="My Deadline: This Week" name="my_deadline_this_week"
+                        domain="[('my_activity_date_deadline', '&gt;=', (context_today() - datetime.timedelta(days=context_today().weekday())).strftime('%Y-%m-%d')),
+                                 ('my_activity_date_deadline', '&lt;=', (context_today() + datetime.timedelta(days=6-context_today().weekday())).strftime('%Y-%m-%d'))]"/>
+                <filter string="My Deadline: This Month" name="my_deadline_this_month"
+                        domain="[('my_activity_date_deadline', '&gt;=', context_today().strftime('%Y-%m-01')),
+                                 ('my_activity_date_deadline', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="My Deadline: This Year" name="my_deadline_this_year"
+                        domain="[('my_activity_date_deadline', '&gt;=', context_today().strftime('%Y-01-01')),
+                                 ('my_activity_date_deadline', '&lt;=', context_today().strftime('%Y-12-31'))]"/>
+                <separator/>
+                <!-- Global / Admin Deadline Filters -->
+                <filter string="Deadline: Today" name="deadline_today"
+                        domain="[('activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter string="Deadline: This Week" name="deadline_this_week"
+                        domain="[('activity_date_deadline', '&gt;=', (context_today() - datetime.timedelta(days=context_today().weekday())).strftime('%Y-%m-%d')),
+                                 ('activity_date_deadline', '&lt;=', (context_today() + datetime.timedelta(days=6-context_today().weekday())).strftime('%Y-%m-%d'))]"/>
+                <filter string="Deadline: This Month" name="deadline_this_month"
+                        domain="[('activity_date_deadline', '&gt;=', context_today().strftime('%Y-%m-01')),
+                                 ('activity_date_deadline', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="Deadline: This Year" name="deadline_this_year"
+                        domain="[('activity_date_deadline', '&gt;=', context_today().strftime('%Y-01-01')),
+                                 ('activity_date_deadline', '&lt;=', context_today().strftime('%Y-12-31'))]"/>
+                <filter string="Deadline (Date Drilldown)" name="filter_activity_date_deadline" date="activity_date_deadline"/>
+                <separator/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Default Pipeline Actions to List View by Default -->
+    <record id="crm.crm_lead_action_pipeline" model="ir.actions.act_window">
+        <field name="view_mode">list,kanban,graph,pivot,calendar,activity,form</field>
+    </record>
+
+    <record id="crm.crm_lead_opportunities" model="ir.actions.act_window">
+        <field name="view_mode">list,kanban,graph,pivot,calendar,activity,form</field>
+    </record>
+
+    <record id="crm.crm_lead_action_pipeline_view_tree" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">list</field>
+        <field name="act_window_id" ref="crm.crm_lead_action_pipeline"/>
+    </record>
+
+    <record id="crm.crm_lead_action_pipeline_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">kanban</field>
+        <field name="act_window_id" ref="crm.crm_lead_action_pipeline"/>
+    </record>
 </odoo>
