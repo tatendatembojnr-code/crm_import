@@ -161,6 +161,10 @@ class CrmImportWizard(models.TransientModel):
                         skipped += 1
 
         elif self.import_type == 'lead':
+            first_rec = records[0] if records else {}
+            if 'reference_name' in first_rec and 'reference_type' in first_rec and 'lead_name' not in first_rec:
+                raise UserError(_("The uploaded file appears to be a To-Dos file (ToDo.csv), but you selected '2. Leads'. Please select '3. To-Dos'."))
+
             # Pre-fetch existing lead IDs to skip fast
             all_legacy_ids = [_safe_str(r.get('name') or r.get('id')) for r in records if _safe_str(r.get('name') or r.get('id'))]
             existing_leads = set(self.env['crm.lead'].sudo().with_context(active_test=False).search([('custom_naming_series', 'in', all_legacy_ids)]).mapped('custom_naming_series'))
@@ -253,10 +257,17 @@ class CrmImportWizard(models.TransientModel):
                     created += len(batch)
 
         elif self.import_type == 'todo':
-            # Pre-fetch existing ToDo IDs to skip fast (assuming name is the ID or we match on something)
-            # Frappe Todos have a 'name' field which is the ID
+            first_rec = records[0] if records else {}
+            if 'lead_name' in first_rec or 'custom_deal_size_' in first_rec:
+                raise UserError(_("The uploaded file appears to be a Leads file (Lead.csv), but you selected '3. To-Dos'. Please select '2. Leads'."))
+
+            # Pre-fetch existing ToDo IDs to skip fast
             all_legacy_ids = [_safe_str(r.get('name') or r.get('id')) for r in records if _safe_str(r.get('name') or r.get('id'))]
-            existing_todos = set(self.env['todo.task'].sudo().search([('legacy_id', 'in', all_legacy_ids)]).mapped('legacy_id'))
+            TodoTaskModel = self.env['todo.task'].sudo()
+            if 'legacy_id' in TodoTaskModel._fields:
+                existing_todos = set(TodoTaskModel.search([('legacy_id', 'in', all_legacy_ids)]).mapped('legacy_id'))
+            else:
+                existing_todos = set(TodoTaskModel.search([('name', 'in', all_legacy_ids)]).mapped('name'))
             
             # Pre-fetch leads for fast mapping
             all_lead_refs = [_safe_str(r.get('reference_name')) for r in records if _safe_str(r.get('reference_name'))]
@@ -280,9 +291,8 @@ class CrmImportWizard(models.TransientModel):
                 subj = _clean_html(subj)
                 creation_date = _clean_datetime(r.get('creation'))
                 
-                todos_to_create.append({
+                todo_dict = {
                     'name': subj,
-                    'legacy_id': legacy_id,
                     'status': _safe_str(r.get('status'), 'Open'),
                     'allocated_to': _safe_str(r.get('owner')),
                     'lead_id': lead_id,
@@ -290,7 +300,14 @@ class CrmImportWizard(models.TransientModel):
                     'description': desc,
                     'create_date': creation_date,
                     'legacy_create_date': creation_date,
-                })
+                }
+                if 'legacy_id' in TodoTaskModel._fields:
+                    todo_dict['legacy_id'] = legacy_id
+                if 'reference_name' in TodoTaskModel._fields:
+                    todo_dict['reference_name'] = erpnext_lead_id
+                if 'reference_type' in TodoTaskModel._fields:
+                    todo_dict['reference_type'] = _safe_str(r.get('reference_type'))
+                todos_to_create.append(todo_dict)
                 
             if todos_to_create:
                 cr = self.env.cr
