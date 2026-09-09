@@ -165,12 +165,14 @@ class CrmImportWizard(models.TransientModel):
             if 'reference_name' in first_rec and 'reference_type' in first_rec and 'lead_name' not in first_rec:
                 raise UserError(_("The uploaded file appears to be a To-Dos file (ToDo.csv), but you selected '2. Leads'. Please select '3. To-Dos'."))
 
-            # Pre-fetch existing lead IDs to skip fast
-            all_legacy_ids = [_safe_str(r.get('name') or r.get('id')) for r in records if _safe_str(r.get('name') or r.get('id'))]
-            existing_leads = set(self.env['crm.lead'].sudo().with_context(active_test=False).search([('custom_naming_series', 'in', all_legacy_ids)]).mapped('custom_naming_series'))
+            cr = self.env.cr
+            # Fast fetch existing lead IDs directly from DB
+            cr.execute("SELECT custom_naming_series FROM crm_lead WHERE custom_naming_series IS NOT NULL")
+            existing_leads = set(r[0] for r in cr.fetchall() if r[0])
             
             # Pre-fetch users for fast mapping
-            user_map = {u.login: u.id for u in self.env['res.users'].sudo().with_context(active_test=False).search([])}
+            cr.execute("SELECT login, id FROM res_users WHERE login IS NOT NULL")
+            user_map = {r[0]: r[1] for r in cr.fetchall() if r[0]}
             
             leads_to_create = []
             for r in records:
@@ -246,14 +248,18 @@ class CrmImportWizard(models.TransientModel):
                 })
             
             if leads_to_create:
-                # Use raw SQL to preserve create_date since ORM overrides it
-                cr = self.env.cr
-                for batch in [leads_to_create[i:i+500] for i in range(0, len(leads_to_create), 500)]:
-                    # Native create to handle triggers/defaults, then raw SQL update for dates
-                    created_recs = self.env['crm.lead'].sudo().with_context(mail_create_nolog=True, mail_create_nosubscribe=True, tracking_disable=True).create(batch)
+                for i in range(0, len(leads_to_create), 500):
+                    batch = leads_to_create[i:i+500]
+                    created_recs = self.env['crm.lead'].sudo().with_context(
+                        mail_create_nolog=True,
+                        mail_create_nosubscribe=True,
+                        tracking_disable=True,
+                        prefetch_fields=False
+                    ).create(batch)
                     for rec in created_recs:
                         if rec.legacy_create_date:
                             cr.execute("UPDATE crm_lead SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
+                    self.env.cr.commit()
                     created += len(batch)
 
         elif self.import_type == 'todo':
@@ -261,18 +267,30 @@ class CrmImportWizard(models.TransientModel):
             if 'lead_name' in first_rec or 'custom_deal_size_' in first_rec:
                 raise UserError(_("The uploaded file appears to be a Leads file (Lead.csv), but you selected '3. To-Dos'. Please select '2. Leads'."))
 
-            # Pre-fetch existing ToDo IDs to skip fast
-            all_legacy_ids = [_safe_str(r.get('name') or r.get('id')) for r in records if _safe_str(r.get('name') or r.get('id'))]
+            cr = self.env.cr
             TodoTaskModel = self.env['todo.task'].sudo()
-            if 'legacy_id' in TodoTaskModel._fields:
-                existing_todos = set(TodoTaskModel.search([('legacy_id', 'in', all_legacy_ids)]).mapped('legacy_id'))
+            has_legacy_id = 'legacy_id' in TodoTaskModel._fields
+            has_ref_name = 'reference_name' in TodoTaskModel._fields
+            has_ref_type = 'reference_type' in TodoTaskModel._fields
+
+            # Fast fetch existing ToDo IDs directly from DB
+            if has_legacy_id:
+                cr.execute("SELECT legacy_id FROM todo_task WHERE legacy_id IS NOT NULL")
+                existing_todos = set(r[0] for r in cr.fetchall() if r[0])
             else:
-                existing_todos = set(TodoTaskModel.search([('name', 'in', all_legacy_ids)]).mapped('name'))
+                cr.execute("SELECT name FROM todo_task WHERE name IS NOT NULL")
+                existing_todos = set(r[0] for r in cr.fetchall() if r[0])
             
-            # Pre-fetch leads for fast mapping
-            all_lead_refs = [_safe_str(r.get('reference_name')) for r in records if _safe_str(r.get('reference_name'))]
-            leads = self.env['crm.lead'].sudo().search_read([('custom_naming_series', 'in', all_lead_refs)], ['id', 'custom_naming_series'])
-            lead_map = {l['custom_naming_series']: l['id'] for l in leads}
+            # Fast fetch lead ID and user ID map in a single SQL query
+            cr.execute("SELECT custom_naming_series, id, user_id FROM crm_lead WHERE custom_naming_series IS NOT NULL")
+            lead_info_map = {r[0]: (r[1], r[2]) for r in cr.fetchall() if r[0]}
+            
+            # Get admin/activity info
+            admin_user_id = 2
+            cr.execute("SELECT id FROM mail_activity_type LIMIT 1")
+            act_row = cr.fetchone()
+            activity_type_id = act_row[0] if act_row else 1
+            lead_model_id = self.env['ir.model']._get('crm.lead').id
             
             todos_to_create = []
             for r in records:
@@ -283,52 +301,63 @@ class CrmImportWizard(models.TransientModel):
                 
                 existing_todos.add(legacy_id)
                 erpnext_lead_id = _safe_str(r.get('reference_name'))
-                lead_id = lead_map.get(erpnext_lead_id, False)
+                lead_tuple = lead_info_map.get(erpnext_lead_id)
+                lead_id = lead_tuple[0] if lead_tuple else False
+                salesperson_id = lead_tuple[1] if (lead_tuple and lead_tuple[1]) else admin_user_id
                 
                 desc_raw = _safe_str(r.get('description'))
                 desc = _clean_html(desc_raw)
                 subj = desc[:80] if desc else 'Imported ToDo'
                 subj = _clean_html(subj)
                 creation_date = _clean_datetime(r.get('creation'))
+                status_val = _safe_str(r.get('status'), 'Open')
+                due_date = _clean_date(r.get('date'))
                 
                 todo_dict = {
                     'name': subj,
-                    'status': _safe_str(r.get('status'), 'Open'),
+                    'status': status_val,
                     'allocated_to': _safe_str(r.get('owner')),
                     'lead_id': lead_id,
-                    'date': _clean_date(r.get('date')),
+                    'date': due_date,
                     'description': desc,
                     'create_date': creation_date,
                     'legacy_create_date': creation_date,
+                    '_salesperson_id': salesperson_id,
                 }
-                if 'legacy_id' in TodoTaskModel._fields:
+                if has_legacy_id:
                     todo_dict['legacy_id'] = legacy_id
-                if 'reference_name' in TodoTaskModel._fields:
+                if has_ref_name:
                     todo_dict['reference_name'] = erpnext_lead_id
-                if 'reference_type' in TodoTaskModel._fields:
+                if has_ref_type:
                     todo_dict['reference_type'] = _safe_str(r.get('reference_type'))
                 todos_to_create.append(todo_dict)
                 
             if todos_to_create:
-                cr = self.env.cr
-                admin_user_id = 2
-                activity_type_id = 4 # To-Do
-                
-                for batch in [todos_to_create[i:i+500] for i in range(0, len(todos_to_create), 500)]:
-                    created_recs = self.env['todo.task'].sudo().with_context(mail_create_nolog=True).create(batch)
+                for i in range(0, len(todos_to_create), 500):
+                    batch = todos_to_create[i:i+500]
+                    orm_batch = []
+                    for b in batch:
+                        b_copy = dict(b)
+                        b_copy.pop('_salesperson_id', None)
+                        orm_batch.append(b_copy)
+                        
+                    created_recs = self.env['todo.task'].sudo().with_context(
+                        mail_create_nolog=True,
+                        mail_create_nosubscribe=True,
+                        tracking_disable=True,
+                        prefetch_fields=False
+                    ).create(orm_batch)
                     
                     activities_to_create = []
-                    for rec in created_recs:
+                    for idx, rec in enumerate(created_recs):
                         if rec.legacy_create_date:
                             cr.execute("UPDATE todo_task SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
                         
                         # Generate native mail.activity for open tasks linked to leads
                         if rec.status == 'Open' and rec.lead_id:
-                            # Assign to lead's salesperson, fallback to admin
-                            salesperson_id = rec.lead_id.user_id.id if rec.lead_id.user_id else admin_user_id
-                            
+                            salesperson_id = batch[idx].get('_salesperson_id') or admin_user_id
                             activities_to_create.append({
-                                'res_model_id': self.env['ir.model']._get('crm.lead').id,
+                                'res_model_id': lead_model_id,
                                 'res_id': rec.lead_id.id,
                                 'res_model': 'crm.lead',
                                 'activity_type_id': activity_type_id,
@@ -340,8 +369,14 @@ class CrmImportWizard(models.TransientModel):
                             })
                             
                     if activities_to_create:
-                        self.env['mail.activity'].sudo().create(activities_to_create)
+                        self.env['mail.activity'].sudo().with_context(
+                            mail_create_nolog=True,
+                            mail_create_nosubscribe=True,
+                            tracking_disable=True
+                        ).create(activities_to_create)
                         
+                    # Commit each batch so progress is never lost even on connection drop!
+                    self.env.cr.commit()
                     created += len(batch)
 
         msg = _(f'Import Complete! Successfully created {created} new records and skipped {skipped} existing records.')
