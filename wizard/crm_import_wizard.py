@@ -4,6 +4,7 @@ import base64
 import io
 import logging
 import re
+import html
 
 _logger = logging.getLogger(__name__)
 
@@ -19,6 +20,14 @@ def _safe_str(val, default=''):
     if s.startswith('"') and s.endswith('"'):
         s = s[1:-1]
     return s if s and s.lower() != 'none' else default
+
+def _clean_html(val):
+    if not val:
+        return ''
+    s = html.unescape(str(val))
+    s = re.sub(r'<[^>]+>', ' ', s).strip()
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
 
 def _clean_datetime(val):
     if val is None: return False
@@ -265,8 +274,10 @@ class CrmImportWizard(models.TransientModel):
                 erpnext_lead_id = _safe_str(r.get('reference_name'))
                 lead_id = lead_map.get(erpnext_lead_id, False)
                 
-                desc = _safe_str(r.get('description'))
+                desc_raw = _safe_str(r.get('description'))
+                desc = _clean_html(desc_raw)
                 subj = desc[:80] if desc else 'Imported ToDo'
+                subj = _clean_html(subj)
                 creation_date = _clean_datetime(r.get('creation'))
                 
                 todos_to_create.append({
@@ -283,11 +294,37 @@ class CrmImportWizard(models.TransientModel):
                 
             if todos_to_create:
                 cr = self.env.cr
+                admin_user_id = 2
+                activity_type_id = 4 # To-Do
+                
                 for batch in [todos_to_create[i:i+500] for i in range(0, len(todos_to_create), 500)]:
                     created_recs = self.env['todo.task'].sudo().with_context(mail_create_nolog=True).create(batch)
+                    
+                    activities_to_create = []
                     for rec in created_recs:
                         if rec.legacy_create_date:
                             cr.execute("UPDATE todo_task SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
+                        
+                        # Generate native mail.activity for open tasks linked to leads
+                        if rec.status == 'Open' and rec.lead_id:
+                            # Assign to lead's salesperson, fallback to admin
+                            salesperson_id = rec.lead_id.user_id.id if rec.lead_id.user_id else admin_user_id
+                            
+                            activities_to_create.append({
+                                'res_model_id': self.env['ir.model']._get('crm.lead').id,
+                                'res_id': rec.lead_id.id,
+                                'res_model': 'crm.lead',
+                                'activity_type_id': activity_type_id,
+                                'summary': (rec.name or '')[:250],
+                                'note': rec.description if rec.description and rec.description != rec.name else False,
+                                'date_deadline': rec.date or fields.Date.context_today(self),
+                                'user_id': salesperson_id,
+                                'active': True,
+                            })
+                            
+                    if activities_to_create:
+                        self.env['mail.activity'].sudo().create(activities_to_create)
+                        
                     created += len(batch)
 
         msg = _(f'Import Complete! Successfully created {created} new records and skipped {skipped} existing records.')

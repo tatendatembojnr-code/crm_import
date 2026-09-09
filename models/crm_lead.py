@@ -184,7 +184,9 @@ class CrmLead(models.Model):
                 for a in record.activity_ids:
                     cleaned_note = (re.sub(r'<[^>]+>', ' ', html.unescape(a.note or '')).strip() if a.note else '')
                     cleaned_note = re.sub(r'\s+', ' ', cleaned_note).strip()
-                    summary_text = re.sub(r'\s+', ' ', a.summary or '').strip()
+                    
+                    summary_text = (re.sub(r'<[^>]+>', ' ', html.unescape(a.summary or '')).strip() if a.summary else '')
+                    summary_text = re.sub(r'\s+', ' ', summary_text).strip()
                     
                     # If summary looks like an ERPNext ID (e.g. T91974 or 10-char hash) and note is available, prefer note!
                     if cleaned_note and (not summary_text or (summary_text.startswith('T') and summary_text[1:].isdigit()) or len(summary_text) <= 12):
@@ -200,7 +202,10 @@ class CrmLead(models.Model):
                 for t in record.todo_ids:
                     todo_desc = (re.sub(r'<[^>]+>', ' ', html.unescape(t.description or '')).strip() if t.description else '')
                     todo_desc = re.sub(r'\s+', ' ', todo_desc).strip()
-                    todo_name = re.sub(r'\s+', ' ', str(t.name or '')).strip()
+                    
+                    todo_name = (re.sub(r'<[^>]+>', ' ', html.unescape(str(t.name or ''))).strip() if t.name else '')
+                    todo_name = re.sub(r'\s+', ' ', todo_name).strip()
+                    
                     if todo_desc and (not todo_name or (todo_name.startswith('T') and todo_name[1:].isdigit()) or len(todo_name) <= 12):
                         todo_text = todo_desc
                     else:
