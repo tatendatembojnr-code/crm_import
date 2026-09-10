@@ -106,9 +106,10 @@ class CrmImportWizard(models.TransientModel):
 
     import_type = fields.Selection([
         ('user', '1. Users'),
-        ('lead', '2. Leads'),
-        ('todo', '3. To-Dos'),
-    ], string='What are you importing?', required=True, default='user')
+        ('source', '2. Lead Sources'),
+        ('lead', '3. Leads'),
+        ('todo', '4. To-Dos'),
+    ], string='What are you importing?', required=True, default='lead')
 
     data_file = fields.Binary(string='File (CSV/Excel)', required=True)
     filename = fields.Char(string='Filename')
@@ -160,10 +161,29 @@ class CrmImportWizard(models.TransientModel):
                         _logger.warning("Failed to create user %s: %s", u_vals.get('login'), str(e))
                         skipped += 1
 
+        elif self.import_type == 'source':
+            cr = self.env.cr
+            cr.execute("SELECT lower(name), id FROM utm_source")
+            existing_sources = {r[0]: r[1] for r in cr.fetchall() if r[0]}
+            sources_to_create = []
+            
+            for r in records:
+                src_name = _safe_str(r.get('source_name') or r.get('name') or r.get('source'))
+                if not src_name or src_name.lower() in existing_sources:
+                    skipped += 1
+                    continue
+                
+                existing_sources[src_name.lower()] = True
+                sources_to_create.append({'name': src_name})
+            
+            if sources_to_create:
+                self.env['utm.source'].sudo().create(sources_to_create)
+                created = len(sources_to_create)
+
         elif self.import_type == 'lead':
             first_rec = records[0] if records else {}
             if 'reference_name' in first_rec and 'reference_type' in first_rec and 'lead_name' not in first_rec:
-                raise UserError(_("The uploaded file appears to be a To-Dos file (ToDo.csv), but you selected '2. Leads'. Please select '3. To-Dos'."))
+                raise UserError(_("The uploaded file appears to be a To-Dos file (ToDo.csv), but you selected '3. Leads'. Please select '4. To-Dos'."))
 
             cr = self.env.cr
             # Fast fetch existing lead IDs directly from DB
@@ -173,6 +193,10 @@ class CrmImportWizard(models.TransientModel):
             # Pre-fetch users for fast mapping
             cr.execute("SELECT login, id FROM res_users WHERE login IS NOT NULL")
             user_map = {r[0]: r[1] for r in cr.fetchall() if r[0]}
+
+            # Pre-fetch sources for fast mapping
+            cr.execute("SELECT lower(name), id FROM utm_source WHERE name IS NOT NULL")
+            source_map = {r[0]: r[1] for r in cr.fetchall() if r[0]}
             
             leads_to_create = []
             for r in records:
@@ -224,6 +248,16 @@ class CrmImportWizard(models.TransientModel):
                 try: deal_size = float(r.get('custom_deal_size_') or 0)
                 except: pass
 
+                raw_src = _safe_str(r.get('source'))
+                source_id = False
+                if raw_src:
+                    if raw_src.lower() in source_map:
+                        source_id = source_map[raw_src.lower()]
+                    else:
+                        new_src = self.env['utm.source'].sudo().create({'name': raw_src})
+                        source_id = new_src.id
+                        source_map[raw_src.lower()] = source_id
+
                 street_val = _safe_str(r.get('custom_full_address') or r.get('Full Address') or r.get('street'))
                 city_val = _safe_str(r.get('custom_city_town') or r.get('City /Town') or r.get('city'))
                 notes_val = _safe_str(r.get('custom_detailed_info') or r.get('Detailed Info') or r.get('Note (Notes)') or r.get('note') or r.get('description'))
@@ -237,7 +271,8 @@ class CrmImportWizard(models.TransientModel):
                     'phone': _safe_str(r.get('mobile_no')),
                     'email_from': _safe_str(r.get('email_id')),
                     'custom_naming_series': legacy_id,
-                    'custom_lead_source': _safe_str(r.get('source')),
+                    'source_id': source_id,
+                    'custom_lead_source': raw_src or False,
                     'custom_territory': _safe_str(r.get('territory')),
                     'custom_industry': _safe_str(r.get('industry')),
                     'custom_product': _safe_str(r.get('custom_product')),
