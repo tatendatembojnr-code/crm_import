@@ -224,6 +224,13 @@ class CrmImportWizard(models.TransientModel):
                 try: deal_size = float(r.get('custom_deal_size_') or 0)
                 except: pass
 
+                street_val = _safe_str(r.get('custom_full_address') or r.get('Full Address') or r.get('street'))
+                city_val = _safe_str(r.get('custom_city_town') or r.get('City /Town') or r.get('city'))
+                notes_val = _safe_str(r.get('custom_detailed_info') or r.get('Detailed Info') or r.get('Note (Notes)') or r.get('note') or r.get('description'))
+                if notes_val:
+                    if not ('<' in notes_val and '>' in notes_val):
+                        notes_val = f"<p>{html.escape(notes_val).replace(chr(10), '<br/>')}</p>"
+
                 leads_to_create.append({
                     'name': title,
                     'partner_name': company_name,
@@ -234,6 +241,9 @@ class CrmImportWizard(models.TransientModel):
                     'custom_territory': _safe_str(r.get('territory')),
                     'custom_industry': _safe_str(r.get('industry')),
                     'custom_product': _safe_str(r.get('custom_product')),
+                    'street': street_val or False,
+                    'city': city_val or False,
+                    'description': notes_val or False,
                     'expected_revenue': deal_size,
                     'custom_deal_size': deal_size,
                     'custom_type_of_business': _safe_str(r.get('custom_type_of_business')),
