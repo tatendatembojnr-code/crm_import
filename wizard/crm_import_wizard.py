@@ -265,6 +265,12 @@ class CrmImportWizard(models.TransientModel):
                     if not ('<' in notes_val and '>' in notes_val):
                         notes_val = f"<p>{html.escape(notes_val).replace(chr(10), '<br/>')}</p>"
 
+                demo_raw = str(r.get('custom_demo_done_') or r.get('Demo Done ') or r.get('custom_demo_done') or '').strip().lower()
+                demo_done = 'yes' if 'demo' in demo_raw and 'no' not in demo_raw else ('yes' if demo_raw == 'yes' else 'no')
+                
+                demo_type_raw = str(r.get('custom_demo_done_online_or_onsite') or r.get('Demo Done Online or Onsite') or r.get('custom_demo_type') or '').strip()
+                demo_type = 'Onsite' if 'onsite' in demo_type_raw.lower() else ('Online' if 'online' in demo_type_raw.lower() else 'N/A')
+
                 leads_to_create.append({
                     'name': title,
                     'partner_name': company_name,
@@ -282,6 +288,8 @@ class CrmImportWizard(models.TransientModel):
                     'expected_revenue': deal_size,
                     'custom_deal_size': deal_size,
                     'custom_type_of_business': _safe_str(r.get('custom_type_of_business')),
+                    'custom_demo_done': demo_done,
+                    'custom_demo_type': demo_type,
                     'custom_quote_date': _clean_date(r.get('custom_quote_date')),
                     'custom_technician': _safe_str(r.get('custom_technician')),
                     'user_id': user_id,
