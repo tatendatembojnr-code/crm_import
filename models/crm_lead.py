@@ -32,7 +32,10 @@ class CrmLead(models.Model):
     custom_technician      = fields.Char(string='Technician Assigned')
 
     # Demo
-    custom_demo_done       = fields.Boolean(string='Demo Done')
+    custom_demo_done       = fields.Selection([
+        ('no', 'No'),
+        ('yes', 'Yes'),
+    ], string='Demo Done', default='no')
     custom_demo_type       = fields.Selection([
         ('Online', 'Online'),
         ('Onsite', 'Onsite'),
@@ -258,3 +261,14 @@ class CrmLead(models.Model):
             latest_date = max(dates) if dates else False
             record.my_activity_date_deadline = latest_date
             record.activity_date_deadline = latest_date
+
+class ProductProduct(models.Model):
+    _inherit = 'product.product'
+
+    def _compute_display_name(self):
+        if self._context.get('hide_code') or self._context.get('display_default_code') is False:
+            for record in self:
+                record.display_name = record.name or ''
+            return
+        super()._compute_display_name()
+
