@@ -24,7 +24,7 @@
                         <field name="phone" string="Phone"/>
                         <field name="website" string="Website"/>
                         <field name="source_id" string="Source"/>
-                        <field name="product_id" string="Product Interest"/>
+                        <field name="product_id" string="Product Interest" options="{'no_create': True}" context="{'display_default_code': False, 'hide_code': True}"/>
                     </group>
                     
                     <!-- Column 2: Deal & Sales Info -->
@@ -48,7 +48,7 @@
                         <field name="custom_technician" string="Technician"/>
                         <field name="custom_type_of_business" string="Type of Business"/>
                         <field name="custom_demo_done" string="Demo Done"/>
-                        <field name="custom_demo_type" string="Demo Done Online/Onsite" invisible="custom_demo_done == False"/>
+                        <field name="custom_demo_type" string="Demo Done Online/Onsite" invisible="custom_demo_done != 'yes'"/>
                     </group>
                 </group>
             </xpath>
@@ -70,7 +70,7 @@
             <xpath expr="//field[@name='name']" position="after">
                 <field name="last_chatter" string="Last Chatter" optional="show"/>
                 <field name="date_deadline" string="Deadline" optional="show"/>
-                <field name="product_id" string="Product Interest" optional="show"/>
+                <field name="product_id" string="Product Interest" optional="show" context="{'display_default_code': False, 'hide_code': True}"/>
             </xpath>
         </field>
     </record>
@@ -82,7 +82,7 @@
         <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
-                <field name="product_id" string="Product Interest" optional="show"/>
+                <field name="product_id" string="Product Interest" optional="show" context="{'display_default_code': False, 'hide_code': True}"/>
             </xpath>
             <xpath expr="//field[@name='activity_ids']" position="attributes">
                 <attribute name="invisible">1</attribute>
