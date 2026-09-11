@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ── CRM Product: List View ──────────────────────────────────────────── -->
+    <record id="view_crm_product_list" model="ir.ui.view">
+        <field name="name">crm.product.list</field>
+        <field name="model">crm.product</field>
+        <field name="arch" type="xml">
+            <list string="CRM Products" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ── CRM Product: Form View ──────────────────────────────────────────── -->
+    <record id="view_crm_product_form" model="ir.ui.view">
+        <field name="name">crm.product.form</field>
+        <field name="model">crm.product</field>
+        <field name="arch" type="xml">
+            <form string="CRM Product">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                        <field name="description"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── CRM Product: Search View ───────────────────────────────────────── -->
+    <record id="view_crm_product_search" model="ir.ui.view">
+        <field name="name">crm.product.search</field>
+        <field name="model">crm.product</field>
+        <field name="arch" type="xml">
+            <search string="Search CRM Products">
+                <field name="name"/>
+                <filter string="Active" name="active" domain="[('active','=',True)]"/>
+                <filter string="Archived" name="archived" domain="[('active','=',False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ── CRM Product: Action ─────────────────────────────────────────────── -->
+    <record id="action_crm_product" model="ir.actions.act_window">
+        <field name="name">CRM Products</field>
+        <field name="res_model">crm.product</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No CRM products yet!
+            </p>
+            <p>
+                Add the products or services your team sells to use them in leads.
+            </p>
+        </field>
+    </record>
+
+    <!-- ── CRM Product: Menu under CRM → Configuration ───────────────────── -->
+    <menuitem
+        id="menu_crm_product"
+        name="CRM Products"
+        parent="crm.crm_menu_config"
+        action="action_crm_product"
+        sequence="20"/>
+</odoo>

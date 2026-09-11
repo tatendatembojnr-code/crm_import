@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- CRM Products — standalone, no relation to product.product -->
+        <record id="crm_product_pos" model="crm.product">
+            <field name="name">Pos</field>
+            <field name="sequence">1</field>
+        </record>
+        <record id="crm_product_erp_accounting" model="crm.product">
+            <field name="name">ERP Accounting</field>
+            <field name="sequence">2</field>
+        </record>
+        <record id="crm_product_fiscalisation" model="crm.product">
+            <field name="name">Fiscalisation</field>
+            <field name="sequence">3</field>
+        </record>
+        <record id="crm_product_school_erp" model="crm.product">
+            <field name="name">School ERP</field>
+            <field name="sequence">4</field>
+        </record>
+        <record id="crm_product_payroll" model="crm.product">
+            <field name="name">Payroll</field>
+            <field name="sequence">5</field>
+        </record>
+        <record id="crm_product_scale" model="crm.product">
+            <field name="name">Scale</field>
+            <field name="sequence">6</field>
+        </record>
+        <record id="crm_product_digi_scale" model="crm.product">
+            <field name="name">Digi Scale</field>
+            <field name="sequence">7</field>
+        </record>
+        <record id="crm_product_biometric" model="crm.product">
+            <field name="name">Biometric</field>
+            <field name="sequence">8</field>
+        </record>
+        <record id="crm_product_odoo" model="crm.product">
+            <field name="name">Odoo</field>
+            <field name="sequence">9</field>
+        </record>
+        <record id="crm_product_erpnext_accounting" model="crm.product">
+            <field name="name">ERPNext Accounting</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="crm_product_erpnext" model="crm.product">
+            <field name="name">ERPNext</field>
+            <field name="sequence">11</field>
+        </record>
+        <record id="crm_product_pharmacy" model="crm.product">
+            <field name="name">Pharmacy</field>
+            <field name="sequence">12</field>
+        </record>
+        <record id="crm_product_driving_school" model="crm.product">
+            <field name="name">Driving School</field>
+            <field name="sequence">13</field>
+        </record>
+        <record id="crm_product_company_reg" model="crm.product">
+            <field name="name">Company Reg</field>
+            <field name="sequence">14</field>
+        </record>
+        <record id="crm_product_school_management" model="crm.product">
+            <field name="name">School Management</field>
+            <field name="sequence">15</field>
+        </record>
+        <record id="crm_product_other" model="crm.product">
+            <field name="name">Other</field>
+            <field name="sequence">99</field>
+        </record>
+    </data>
+</odoo>
