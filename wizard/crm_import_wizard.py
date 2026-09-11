@@ -190,6 +190,7 @@ class CrmImportWizard(models.TransientModel):
             raise UserError(_("No valid data rows found."))
 
         created = 0
+        updated = 0
         skipped = 0
 
         if self.import_type == 'user':
@@ -543,7 +544,17 @@ class CrmImportWizard(models.TransientModel):
                     self.env.cr.commit()
                     created += len(batch)
 
-        msg = _(f'Import Complete! Successfully created {created} new records and skipped {skipped} existing records.')
+        summary_parts = []
+        if created:
+            summary_parts.append(f"created {created:,} new records")
+        if updated:
+            summary_parts.append(f"updated {updated:,} existing records")
+        if skipped:
+            summary_parts.append(f"skipped {skipped:,} records")
+        if not summary_parts:
+            summary_parts.append(f"verified {len(records):,} records (all up to date)")
+
+        msg = _(f"Import Complete! Successfully {', '.join(summary_parts)}.")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
