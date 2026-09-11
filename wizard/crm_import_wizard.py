@@ -418,7 +418,7 @@ class CrmImportWizard(models.TransientModel):
                             partner_name = CASE WHEN (l.partner_name IS NULL OR l.partner_name = '') AND v.p_name IS NOT NULL THEN v.p_name ELSE l.partner_name END,
                             phone = CASE WHEN (l.phone IS NULL OR l.phone = '') AND v.phone IS NOT NULL THEN v.phone ELSE l.phone END,
                             email_from = CASE WHEN (l.email_from IS NULL OR l.email_from = '') AND v.email IS NOT NULL THEN v.email ELSE l.email_from END,
-                            crm_product_id = CASE WHEN l.crm_product_id IS NULL AND v.prod_id IS NOT NULL THEN v.prod_id ELSE l.crm_product_id END,
+                            crm_product_id = CASE WHEN l.crm_product_id IS NULL AND v.prod_id IS NOT NULL THEN NULLIF(v.prod_id::text, '')::integer ELSE l.crm_product_id END,
                             custom_product = CASE WHEN (l.custom_product IS NULL OR l.custom_product = '') AND v.prod_str IS NOT NULL THEN v.prod_str ELSE l.custom_product END
                         FROM (VALUES %s) AS v(leg_id, c_name, p_name, phone, email, prod_id, prod_str)
                         WHERE l.custom_naming_series = v.leg_id;
