@@ -14,8 +14,6 @@ class CrmLead(models.Model):
             if not limit or limit == 80:
                 limit = 2000
             kwargs.setdefault('unfold_read_default_limit', 500)
-        elif not order:
-            order = 'priority desc, create_date desc'
 
         return super().web_read_group(
             domain, groupby, aggregates=aggregates, limit=limit, offset=offset, order=order, **kwargs
@@ -28,8 +26,16 @@ class CrmLead(models.Model):
                 order = 'create_date desc'
             if not limit or limit == 80:
                 limit = 2000
-        elif not order:
-            order = 'priority desc, create_date desc'
+        return super()._read_group(
+            domain, groupby=groupby, aggregates=aggregates, having=having, offset=offset, limit=limit, order=order
+        )
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('user_id'):
+                vals['user_id'] = self.env.uid
+        return super().create(vals_list)
+
     def action_send_email_composer(self):
         self.ensure_one()
         template_id = self.env['ir.model.data']._xmlid_to_res_id('crm.email_template_opportunity_mail', raise_if_not_found=False)
