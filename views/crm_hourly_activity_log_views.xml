@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List / Tree View for Hourly Activity Log -->
+    <record id="crm_hourly_activity_log_view_tree" model="ir.ui.view">
+        <field name="name">crm.hourly.activity.log.list</field>
+        <field name="model">crm.hourly.activity.log</field>
+        <field name="arch" type="xml">
+            <list string="Hourly Activity Log" default_order="activity_date desc, total_count desc" create="0" delete="0" edit="0">
+                <field name="user_id" widget="many2one_avatar_user" string="Salesperson"/>
+                <field name="h08_09" string="8am to 9am" sum="Total 8am-9am"/>
+                <field name="h09_10" string="9am to 10am" sum="Total 9am-10am"/>
+                <field name="h10_11" string="10am to 11am" sum="Total 10am-11am"/>
+                <field name="h11_12" string="11am to 12pm" sum="Total 11am-12pm"/>
+                <field name="h12_01" string="12pm to 1pm" sum="Total 12pm-1pm"/>
+                <field name="h02_03" string="2pm to 3pm" sum="Total 2pm-3pm"/>
+                <field name="h03_04" string="3pm to 4pm" sum="Total 3pm-4pm"/>
+                <field name="h04_05" string="4pm to 5pm" sum="Total 4pm-5pm"/>
+                <field name="total_count" string="Total" sum="Grand Total"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View for Hourly Activity Log -->
+    <record id="crm_hourly_activity_log_view_search" model="ir.ui.view">
+        <field name="name">crm.hourly.activity.log.search</field>
+        <field name="model">crm.hourly.activity.log</field>
+        <field name="arch" type="xml">
+            <search string="Search Hourly Activity Log">
+                <field name="user_id" string="Salesperson"/>
+                <separator/>
+                <filter string="My Activities" name="my_activities" domain="[('user_id', '=', uid)]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action for Hourly Activity Log -->
+    <record id="action_crm_hourly_activity_log" model="ir.actions.act_window">
+        <field name="name">Hourly Activity Log</field>
+        <field name="res_model">crm.hourly.activity.log</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="crm_hourly_activity_log_view_tree"/>
+        <field name="search_view_id" ref="crm_hourly_activity_log_view_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Hourly Activity Log
+            </p>
+            <p>
+                Hourly timetable overview of leads, to-dos, and activities completed per salesperson.
+            </p>
+        </field>
+    </record>
+
+    <!-- Top CRM Menu Item for Hourly Activity Log -->
+    <menuitem id="crm_menu_hourly_activity_log"
+              name="Hourly Activity Log"
+              parent="crm.crm_menu_root"
+              action="action_crm_hourly_activity_log"
+              sequence="5"/>
+</odoo>

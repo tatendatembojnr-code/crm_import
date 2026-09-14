@@ -256,9 +256,30 @@ class CrmImportWizard(models.TransientModel):
             cr.execute("SELECT custom_naming_series FROM crm_lead WHERE custom_naming_series IS NOT NULL")
             existing_leads = set(r[0] for r in cr.fetchall() if r[0])
             
-            # Pre-fetch users for fast mapping
-            cr.execute("SELECT login, id FROM res_users WHERE login IS NOT NULL")
-            user_map = {r[0]: r[1] for r in cr.fetchall() if r[0]}
+            # Pre-fetch users for fast mapping with aliases and domain cleanups
+            cr.execute("""
+                SELECT u.id, u.login, p.email, p.name 
+                FROM res_users u 
+                LEFT JOIN res_partner p ON u.partner_id = p.id 
+                WHERE u.active IS TRUE
+                ORDER BY 
+                    CASE WHEN u.login LIKE '%@example.com' THEN 0 ELSE 1 END ASC,
+                    CASE WHEN p.name LIKE '%@%' THEN 0 ELSE 1 END ASC,
+                    u.id ASC
+            """)
+            user_map = {}
+            for r in cr.fetchall():
+                uid_val, login, email, pname = r[0], (r[1] or '').strip().lower(), (r[2] or '').strip().lower(), (r[3] or '').strip().lower()
+                if login:
+                    user_map[login] = uid_val
+                    if login.endswith('@example.com'):
+                        user_map[login.replace('@example.com', '')] = uid_val
+                if email and email != 'false':
+                    user_map[email] = uid_val
+                if pname:
+                    user_map[pname] = uid_val
+            user_map['administrator'] = 2
+            user_map['admin'] = 2
 
             # Pre-fetch sources for fast mapping
             cr.execute("SELECT lower(name), id FROM utm_source WHERE name IS NOT NULL")
@@ -294,24 +315,6 @@ class CrmImportWizard(models.TransientModel):
                     except Exception:
                         pass
 
-                if legacy_id in existing_leads:
-                    # Queue for prepopulating existing leads whose contact_name, partner_name, or product is missing
-                    leads_to_update.append((legacy_id, contact_name, company_name or None, mobile_no or None, email_val or None, crm_product_id or None, product or None))
-                    continue
-                
-                existing_leads.add(legacy_id)
-                
-                parts = []
-                if contact_name: parts.append(contact_name)
-                if company_name and company_name != contact_name: parts.append(company_name)
-                if territory: parts.append(territory)
-                
-                title = " - ".join(parts).strip()
-                if product:
-                    title = f"{title} - {product}" if title else product
-                if not title:
-                    title = contact_name or "Unknown Lead"
-                
                 status_val = _safe_str(r.get('status') or r.get('Status'))
                 stage_id = 1
                 probability = 10.0
@@ -330,8 +333,12 @@ class CrmImportWizard(models.TransientModel):
                     active = False
                     probability = 0.0
 
-                owner_email = _safe_str(r.get('owner') or r.get('Lead Owner'))
-                user_id = user_map.get(owner_email, False)
+                creator_raw = _safe_str(r.get('owner') or r.get('Created By') or r.get('created_by'))
+                create_uid_val = user_map.get(creator_raw.lower()) if creator_raw else False
+
+                salesperson_raw = _safe_str(r.get('lead_owner') or r.get('Lead Owner') or r.get('salesperson') or r.get('owner'))
+                user_id = user_map.get(salesperson_raw.lower()) if salesperson_raw else create_uid_val
+
                 creation_date = _clean_datetime(r.get('creation') or r.get('Creation') or r.get('Added On (Notes)'))
                 
                 deal_size = 0.0
@@ -361,6 +368,48 @@ class CrmImportWizard(models.TransientModel):
                 demo_type_raw = str(r.get('custom_demo_done_online_or_onsite') or r.get('Demo Done Online or Onsite') or r.get('custom_demo_type') or '').strip()
                 demo_type = 'Onsite' if 'onsite' in demo_type_raw.lower() else ('Online' if 'online' in demo_type_raw.lower() else 'N/A')
 
+                if legacy_id in existing_leads:
+                    # Queue for prepopulating existing leads across all fields if missing in DB
+                    leads_to_update.append((
+                        legacy_id,
+                        contact_name or None,
+                        company_name or None,
+                        mobile_no or None,
+                        email_val or None,
+                        crm_product_id or None,
+                        product or None,
+                        source_id or None,
+                        raw_src or None,
+                        territory or None,
+                        _safe_str(r.get('industry') or r.get('Industry')) or None,
+                        street_val or None,
+                        city_val or None,
+                        notes_val or None,
+                        deal_size if deal_size > 0 else 0.0,
+                        _safe_str(r.get('custom_type_of_business') or r.get('Type of Business')) or None,
+                        demo_done or 'no',
+                        demo_type or 'N/A',
+                        _clean_date(r.get('custom_quote_date') or r.get('Quote Date')) or None,
+                        _safe_str(r.get('custom_technician') or r.get('Technician')) or None,
+                        user_id or None,
+                        create_uid_val or None,
+                        creation_date or None
+                    ))
+                    continue
+                
+                existing_leads.add(legacy_id)
+                
+                parts = []
+                if contact_name: parts.append(contact_name)
+                if company_name and company_name != contact_name: parts.append(company_name)
+                if territory: parts.append(territory)
+                
+                title = " - ".join(parts).strip()
+                if product:
+                    title = f"{title} - {product}" if title else product
+                if not title:
+                    title = contact_name or "Unknown Lead"
+
                 lead_vals = {
                     'name': title,
                     'contact_name': contact_name,
@@ -389,6 +438,7 @@ class CrmImportWizard(models.TransientModel):
                     'active': active,
                     'create_date': creation_date,
                     'legacy_create_date': creation_date,
+                    '_create_uid': create_uid_val,
                 }
                 if has_crm_product_field and crm_product_id:
                     lead_vals['crm_product_id'] = crm_product_id
@@ -397,42 +447,165 @@ class CrmImportWizard(models.TransientModel):
             if leads_to_create:
                 for i in range(0, len(leads_to_create), 500):
                     batch = leads_to_create[i:i+500]
+                    orm_batch = []
+                    for b in batch:
+                        b_copy = dict(b)
+                        b_copy.pop('_create_uid', None)
+                        orm_batch.append(b_copy)
+                        
                     created_recs = self.env['crm.lead'].sudo().with_context(
                         mail_create_nolog=True,
                         mail_create_nosubscribe=True,
                         tracking_disable=True,
                         prefetch_fields=False
-                    ).create(batch)
-                    for rec in created_recs:
-                        if rec.legacy_create_date:
-                            cr.execute("UPDATE crm_lead SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
-                    self.env.cr.commit()
+                    ).create(orm_batch)
+                    for idx, rec in enumerate(created_recs):
+                        c_uid = batch[idx].get('_create_uid')
+                        leg_date = rec.legacy_create_date
+                        if c_uid or leg_date:
+                            self.env.cr.execute("""
+                                UPDATE crm_lead 
+                                SET create_date = COALESCE(%s, create_date),
+                                    create_uid = COALESCE(%s, create_uid)
+                                WHERE id = %s
+                            """, (leg_date, c_uid, rec.id))
                     created += len(batch)
 
             if leads_to_update:
                 from psycopg2.extras import execute_values
-                for i in range(0, len(leads_to_update), 2000):
-                    chunk = leads_to_update[i:i+2000]
-                    execute_values(cr, """
-                        UPDATE crm_lead AS l
-                        SET contact_name = CASE WHEN (l.contact_name IS NULL OR l.contact_name = '') THEN v.c_name ELSE l.contact_name END,
-                            partner_name = CASE WHEN (l.partner_name IS NULL OR l.partner_name = '') AND v.p_name IS NOT NULL THEN v.p_name ELSE l.partner_name END,
-                            phone = CASE WHEN (l.phone IS NULL OR l.phone = '') AND v.phone IS NOT NULL THEN v.phone ELSE l.phone END,
-                            email_from = CASE WHEN (l.email_from IS NULL OR l.email_from = '') AND v.email IS NOT NULL THEN v.email ELSE l.email_from END,
-                            crm_product_id = CASE WHEN l.crm_product_id IS NULL AND v.prod_id IS NOT NULL THEN NULLIF(v.prod_id::text, '')::integer ELSE l.crm_product_id END,
-                            custom_product = CASE WHEN (l.custom_product IS NULL OR l.custom_product = '') AND v.prod_str IS NOT NULL THEN v.prod_str ELSE l.custom_product END
-                        FROM (VALUES %s) AS v(leg_id, c_name, p_name, phone, email, prod_id, prod_str)
-                        WHERE l.custom_naming_series = v.leg_id;
+                self.env.cr.execute("""
+                    CREATE TEMP TABLE IF NOT EXISTS tmp_lead_update (
+                        leg_id VARCHAR,
+                        c_name VARCHAR,
+                        p_name VARCHAR,
+                        phone VARCHAR,
+                        email VARCHAR,
+                        prod_id INT,
+                        prod_str VARCHAR,
+                        src_id INT,
+                        raw_src VARCHAR,
+                        territory VARCHAR,
+                        industry VARCHAR,
+                        street VARCHAR,
+                        city VARCHAR,
+                        description TEXT,
+                        deal_size NUMERIC,
+                        tob VARCHAR,
+                        demo_done VARCHAR,
+                        demo_type VARCHAR,
+                        quote_date DATE,
+                        technician VARCHAR,
+                        user_id INT,
+                        c_uid INT,
+                        creation_date TIMESTAMP
+                    ) ON COMMIT DROP;
+                    TRUNCATE tmp_lead_update;
+                """)
+                for i in range(0, len(leads_to_update), 5000):
+                    chunk = leads_to_update[i:i+5000]
+                    execute_values(self.env.cr, """
+                        INSERT INTO tmp_lead_update (leg_id, c_name, p_name, phone, email, prod_id, prod_str, src_id, raw_src, territory, industry, street, city, description, deal_size, tob, demo_done, demo_type, quote_date, technician, user_id, c_uid, creation_date)
+                        VALUES %s
                     """, chunk)
-                    self.env.cr.commit()
+                
+                self.env.cr.execute("CREATE INDEX IF NOT EXISTS idx_tmp_lead_update_leg ON tmp_lead_update (leg_id);")
+                
+                self.env.cr.execute("""
+                    UPDATE crm_lead AS l
+                    SET contact_name = CASE WHEN (l.contact_name IS NULL OR l.contact_name = '') AND v.c_name IS NOT NULL THEN v.c_name ELSE l.contact_name END,
+                        partner_name = CASE WHEN (l.partner_name IS NULL OR l.partner_name = '') AND v.p_name IS NOT NULL THEN v.p_name ELSE l.partner_name END,
+                        phone = CASE WHEN (l.phone IS NULL OR l.phone = '') AND v.phone IS NOT NULL THEN v.phone ELSE l.phone END,
+                        email_from = CASE WHEN (l.email_from IS NULL OR l.email_from = '') AND v.email IS NOT NULL THEN v.email ELSE l.email_from END,
+                        crm_product_id = CASE WHEN l.crm_product_id IS NULL AND v.prod_id IS NOT NULL THEN v.prod_id ELSE l.crm_product_id END,
+                        custom_product = CASE WHEN (l.custom_product IS NULL OR l.custom_product = '') AND v.prod_str IS NOT NULL THEN v.prod_str ELSE l.custom_product END,
+                        source_id = CASE WHEN l.source_id IS NULL AND v.src_id IS NOT NULL THEN v.src_id ELSE l.source_id END,
+                        custom_lead_source = CASE WHEN (l.custom_lead_source IS NULL OR l.custom_lead_source = '') AND v.raw_src IS NOT NULL THEN v.raw_src ELSE l.custom_lead_source END,
+                        custom_territory = CASE WHEN (l.custom_territory IS NULL OR l.custom_territory = '') AND v.territory IS NOT NULL THEN v.territory ELSE l.custom_territory END,
+                        custom_industry = CASE WHEN (l.custom_industry IS NULL OR l.custom_industry = '') AND v.industry IS NOT NULL THEN v.industry ELSE l.custom_industry END,
+                        street = CASE WHEN (l.street IS NULL OR l.street = '') AND v.street IS NOT NULL THEN v.street ELSE l.street END,
+                        city = CASE WHEN (l.city IS NULL OR l.city = '') AND v.city IS NOT NULL THEN v.city ELSE l.city END,
+                        description = CASE WHEN (l.description IS NULL OR l.description = '') AND v.description IS NOT NULL THEN v.description ELSE l.description END,
+                        expected_revenue = CASE WHEN (l.expected_revenue IS NULL OR l.expected_revenue = 0) AND v.deal_size > 0 THEN v.deal_size ELSE l.expected_revenue END,
+                        custom_deal_size = CASE WHEN (l.custom_deal_size IS NULL OR l.custom_deal_size = 0) AND v.deal_size > 0 THEN v.deal_size ELSE l.custom_deal_size END,
+                        custom_type_of_business = CASE WHEN (l.custom_type_of_business IS NULL OR l.custom_type_of_business = '') AND v.tob IS NOT NULL THEN v.tob ELSE l.custom_type_of_business END,
+                        custom_demo_done = CASE WHEN (l.custom_demo_done IS NULL OR l.custom_demo_done = '' OR l.custom_demo_done = 'no') AND v.demo_done = 'yes' THEN 'yes' ELSE l.custom_demo_done END,
+                        custom_demo_type = CASE WHEN (l.custom_demo_type IS NULL OR l.custom_demo_type = '' OR l.custom_demo_type = 'N/A') AND v.demo_type != 'N/A' THEN v.demo_type ELSE l.custom_demo_type END,
+                        custom_quote_date = CASE WHEN l.custom_quote_date IS NULL AND v.quote_date IS NOT NULL THEN v.quote_date ELSE l.custom_quote_date END,
+                        custom_technician = CASE WHEN (l.custom_technician IS NULL OR l.custom_technician = '') AND v.technician IS NOT NULL THEN v.technician ELSE l.custom_technician END,
+                        user_id = COALESCE(v.user_id, l.user_id),
+                        create_uid = COALESCE(v.c_uid, l.create_uid),
+                        create_date = COALESCE(v.creation_date, l.create_date)
+                    FROM tmp_lead_update v
+                    WHERE l.custom_naming_series = v.leg_id;
+                """)
                 updated = len(leads_to_update)
+
+            # ── Multi-Pass Reconciliation Loop (Loop until convergence / 0 changes) ──
+            reconciliation_passes = 0
+            while reconciliation_passes < 3:
+                reconciliation_passes += 1
+                changes_made = 0
+
+                # Loop A: Re-link CRM Products
+                self.env.cr.execute("""
+                    INSERT INTO crm_product (name)
+                    SELECT DISTINCT TRIM(custom_product)
+                    FROM crm_lead
+                    WHERE custom_product IS NOT NULL AND TRIM(custom_product) != ''
+                      AND LOWER(TRIM(custom_product)) NOT IN (SELECT LOWER(TRIM(name)) FROM crm_product)
+                    ON CONFLICT DO NOTHING;
+                """)
+                self.env.cr.execute("""
+                    UPDATE crm_lead l
+                    SET crm_product_id = p.id
+                    FROM crm_product p
+                    WHERE LOWER(TRIM(l.custom_product)) = LOWER(TRIM(p.name))
+                      AND l.crm_product_id IS NULL;
+                """)
+                changes_made += self.env.cr.rowcount
+
+                # Loop B: Re-link UTM Lead Sources
+                self.env.cr.execute("""
+                    INSERT INTO utm_source (name)
+                    SELECT DISTINCT TRIM(custom_lead_source)
+                    FROM crm_lead
+                    WHERE custom_lead_source IS NOT NULL AND TRIM(custom_lead_source) != ''
+                      AND LOWER(TRIM(custom_lead_source)) NOT IN (SELECT LOWER(TRIM(name)) FROM utm_source)
+                    ON CONFLICT DO NOTHING;
+                """)
+                self.env.cr.execute("""
+                    UPDATE crm_lead l
+                    SET source_id = s.id
+                    FROM utm_source s
+                    WHERE LOWER(TRIM(l.custom_lead_source)) = LOWER(TRIM(s.name))
+                      AND l.source_id IS NULL;
+                """)
+                changes_made += self.env.cr.rowcount
+
+                # Loop C: Re-link unlinked To-Dos to newly imported Leads
+                self.env.cr.execute("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables WHERE table_name = 'todo_task'
+                    );
+                """)
+                if self.env.cr.fetchone()[0]:
+                    self.env.cr.execute("""
+                        UPDATE todo_task t
+                        SET lead_id = l.id
+                        FROM crm_lead l
+                        WHERE (t.reference_name = l.custom_naming_series OR t.name = l.custom_naming_series)
+                          AND t.lead_id IS NULL;
+                    """)
+                    changes_made += self.env.cr.rowcount
+
+                if changes_made == 0:
+                    break
 
         elif self.import_type == 'todo':
             first_rec = records[0] if records else {}
             if 'lead_name' in first_rec or 'custom_deal_size_' in first_rec:
                 raise UserError(_("The uploaded file appears to be a Leads file (Lead.csv), but you selected '3. To-Dos'. Please select '2. Leads'."))
 
-            cr = self.env.cr
             TodoTaskModel = self.env['todo.task'].sudo()
             has_legacy_id = 'legacy_id' in TodoTaskModel._fields
             has_ref_name = 'reference_name' in TodoTaskModel._fields
@@ -440,31 +613,31 @@ class CrmImportWizard(models.TransientModel):
 
             # Fast fetch existing ToDo IDs directly from DB
             if has_legacy_id:
-                cr.execute("SELECT legacy_id FROM todo_task WHERE legacy_id IS NOT NULL")
-                existing_todos = set(r[0] for r in cr.fetchall() if r[0])
+                self.env.cr.execute("SELECT legacy_id FROM todo_task WHERE legacy_id IS NOT NULL")
+                existing_todos = set(r[0] for r in self.env.cr.fetchall() if r[0])
             else:
-                cr.execute("SELECT name FROM todo_task WHERE name IS NOT NULL")
-                existing_todos = set(r[0] for r in cr.fetchall() if r[0])
+                self.env.cr.execute("SELECT name FROM todo_task WHERE name IS NOT NULL")
+                existing_todos = set(r[0] for r in self.env.cr.fetchall() if r[0])
             
             # Fast fetch lead ID and user ID map in a single SQL query
-            cr.execute("SELECT custom_naming_series, id, user_id FROM crm_lead WHERE custom_naming_series IS NOT NULL")
-            lead_info_map = {r[0]: (r[1], r[2]) for r in cr.fetchall() if r[0]}
+            self.env.cr.execute("SELECT custom_naming_series, id, user_id FROM crm_lead WHERE custom_naming_series IS NOT NULL")
+            lead_info_map = {r[0]: (r[1], r[2]) for r in self.env.cr.fetchall() if r[0]}
             
             # Get admin/activity info
             admin_user_id = 2
-            cr.execute("SELECT id FROM mail_activity_type LIMIT 1")
-            act_row = cr.fetchone()
+            self.env.cr.execute("SELECT id FROM mail_activity_type LIMIT 1")
+            act_row = self.env.cr.fetchone()
             activity_type_id = act_row[0] if act_row else 1
             lead_model_id = self.env['ir.model']._get('crm.lead').id
             
             todos_to_create = []
+            todos_to_update = []
             for r in records:
                 legacy_id = _safe_str(r.get('name') or r.get('id'))
-                if not legacy_id or legacy_id in existing_todos:
+                if not legacy_id:
                     skipped += 1
                     continue
                 
-                existing_todos.add(legacy_id)
                 erpnext_lead_id = _safe_str(r.get('reference_name'))
                 lead_tuple = lead_info_map.get(erpnext_lead_id)
                 lead_id = lead_tuple[0] if lead_tuple else False
@@ -477,11 +650,18 @@ class CrmImportWizard(models.TransientModel):
                 creation_date = _clean_datetime(r.get('creation'))
                 status_val = _safe_str(r.get('status'), 'Open')
                 due_date = _clean_date(r.get('date'))
+                allocated_to = _safe_str(r.get('owner'))
+
+                if legacy_id in existing_todos:
+                    todos_to_update.append((legacy_id, lead_id or None, due_date or None, desc or None, status_val or None, allocated_to or None))
+                    continue
+                
+                existing_todos.add(legacy_id)
                 
                 todo_dict = {
                     'name': subj,
                     'status': status_val,
-                    'allocated_to': _safe_str(r.get('owner')),
+                    'allocated_to': allocated_to,
                     'lead_id': lead_id,
                     'date': due_date,
                     'description': desc,
@@ -516,7 +696,7 @@ class CrmImportWizard(models.TransientModel):
                     activities_to_create = []
                     for idx, rec in enumerate(created_recs):
                         if rec.legacy_create_date:
-                            cr.execute("UPDATE todo_task SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
+                            self.env.cr.execute("UPDATE todo_task SET create_date=%s WHERE id=%s", (rec.legacy_create_date, rec.id))
                         
                         # Generate native mail.activity for open tasks linked to leads
                         if rec.status == 'Open' and rec.lead_id:
@@ -540,9 +720,104 @@ class CrmImportWizard(models.TransientModel):
                             tracking_disable=True
                         ).create(activities_to_create)
                         
-                    # Commit each batch so progress is never lost even on connection drop!
-                    self.env.cr.commit()
                     created += len(batch)
+
+            if todos_to_update:
+                from psycopg2.extras import execute_values
+                self.env.cr.execute("""
+                    CREATE TEMP TABLE IF NOT EXISTS tmp_todo_update (
+                        leg_id VARCHAR,
+                        lead_id INT,
+                        due_date DATE,
+                        description TEXT,
+                        status VARCHAR,
+                        allocated_to VARCHAR
+                    ) ON COMMIT DROP;
+                    TRUNCATE tmp_todo_update;
+                """)
+                for i in range(0, len(todos_to_update), 5000):
+                    chunk = todos_to_update[i:i+5000]
+                    execute_values(self.env.cr, """
+                        INSERT INTO tmp_todo_update (leg_id, lead_id, due_date, description, status, allocated_to)
+                        VALUES %s
+                    """, chunk)
+                
+                self.env.cr.execute("CREATE INDEX IF NOT EXISTS idx_tmp_todo_update_leg ON tmp_todo_update (leg_id);")
+                
+                if has_legacy_id:
+                    self.env.cr.execute("""
+                        UPDATE todo_task AS t
+                        SET lead_id = COALESCE(t.lead_id, v.lead_id),
+                            date = COALESCE(t.date, v.due_date),
+                            description = CASE WHEN (t.description IS NULL OR t.description = '') THEN v.description ELSE t.description END,
+                            status = CASE WHEN (t.status IS NULL OR t.status = '') THEN v.status ELSE t.status END,
+                            allocated_to = CASE WHEN (t.allocated_to IS NULL OR t.allocated_to = '') THEN v.allocated_to ELSE t.allocated_to END
+                        FROM tmp_todo_update v
+                        WHERE t.legacy_id = v.leg_id;
+                    """)
+                else:
+                    self.env.cr.execute("""
+                        UPDATE todo_task AS t
+                        SET lead_id = COALESCE(t.lead_id, v.lead_id),
+                            date = COALESCE(t.date, v.due_date),
+                            description = CASE WHEN (t.description IS NULL OR t.description = '') THEN v.description ELSE t.description END,
+                            status = CASE WHEN (t.status IS NULL OR t.status = '') THEN v.status ELSE t.status END,
+                            allocated_to = CASE WHEN (t.allocated_to IS NULL OR t.allocated_to = '') THEN v.allocated_to ELSE t.allocated_to END
+                        FROM tmp_todo_update v
+                        WHERE t.name = v.leg_id;
+                    """)
+                updated = len(todos_to_update)
+
+            # ── Fast Reconciliation (Index-accelerated) ──
+            # Re-link unlinked To-Dos by custom_naming_series
+            self.env.cr.execute("""
+                UPDATE todo_task t
+                SET lead_id = l.id
+                FROM crm_lead l
+                WHERE t.reference_name = l.custom_naming_series
+                  AND t.lead_id IS NULL;
+            """)
+            self.env.cr.execute("""
+                UPDATE todo_task t
+                SET lead_id = l.id
+                FROM crm_lead l
+                WHERE t.name = l.custom_naming_series
+                  AND t.lead_id IS NULL;
+            """)
+
+            # Fast sync missing mail.activity records for open to-dos linked to leads
+            self.env.cr.execute("""
+                SELECT t.id, t.name, t.description, t.date, t.lead_id, COALESCE(l.user_id, %s)
+                FROM todo_task t
+                JOIN crm_lead l ON t.lead_id = l.id
+                WHERE t.status = 'Open'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM mail_activity a 
+                      WHERE a.res_model = 'crm.lead' AND a.res_id = l.id AND a.summary = SUBSTRING(t.name FROM 1 FOR 250)
+                  )
+                LIMIT 500;
+            """, (admin_user_id,))
+            missing_acts = self.env.cr.fetchall()
+            if missing_acts:
+                acts_to_insert = []
+                for m in missing_acts:
+                    acts_to_insert.append({
+                        'res_model_id': lead_model_id,
+                        'res_id': m[4],
+                        'res_model': 'crm.lead',
+                        'activity_type_id': activity_type_id,
+                        'summary': (m[1] or '')[:250],
+                        'note': m[2] if m[2] and m[2] != m[1] else False,
+                        'date_deadline': m[3] or fields.Date.context_today(self),
+                        'user_id': m[5] or admin_user_id,
+                        'active': True,
+                    })
+                if acts_to_insert:
+                    self.env['mail.activity'].sudo().with_context(
+                        mail_create_nolog=True,
+                        mail_create_nosubscribe=True,
+                        tracking_disable=True
+                    ).create(acts_to_insert)
 
         summary_parts = []
         if created:
@@ -552,14 +827,14 @@ class CrmImportWizard(models.TransientModel):
         if skipped:
             summary_parts.append(f"skipped {skipped:,} records")
         if not summary_parts:
-            summary_parts.append(f"verified {len(records):,} records (all up to date)")
+            summary_parts.append(f"verified {len(records):,} records (all 100% matched and reconciled)")
 
-        msg = _(f"Import Complete! Successfully {', '.join(summary_parts)}.")
+        msg = _(f"Import & Reconciliation Complete! Successfully {', '.join(summary_parts)} across all fields.")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
-                'title': _('Import Summary'),
+                'title': _('Import & Reconciliation Summary'),
                 'message': msg,
                 'type': 'success',
                 'sticky': True,

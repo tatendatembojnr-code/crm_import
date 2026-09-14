@@ -2,6 +2,71 @@ from odoo import models, fields, api
 
 class CrmLead(models.Model):
     _inherit = 'crm.lead'
+    _order = 'priority desc, create_date desc, id desc'
+
+    @api.model
+    def web_read_group(self, domain, groupby, aggregates=(), limit=None, offset=0, order=None, **kwargs):
+        # When grouping by create_date (day, month, week, year), default order to descending (latest first)
+        # and expand limit to show all groups across all records (e.g. 597 days) without 80-limit cutoff
+        if groupby and any(isinstance(g, str) and 'create_date' in g for g in groupby):
+            if not order:
+                order = 'create_date desc'
+            if not limit or limit == 80:
+                limit = 2000
+            kwargs.setdefault('unfold_read_default_limit', 500)
+        elif not order:
+            order = 'priority desc, create_date desc'
+
+        return super().web_read_group(
+            domain, groupby, aggregates=aggregates, limit=limit, offset=offset, order=order, **kwargs
+        )
+
+    @api.model
+    def _read_group(self, domain, groupby=(), aggregates=(), having=(), offset=0, limit=None, order=None):
+        if groupby and any(isinstance(g, str) and 'create_date' in g for g in groupby):
+            if not order:
+                order = 'create_date desc'
+            if not limit or limit == 80:
+                limit = 2000
+        elif not order:
+            order = 'priority desc, create_date desc'
+    def action_send_email_composer(self):
+        self.ensure_one()
+        template_id = self.env['ir.model.data']._xmlid_to_res_id('crm.email_template_opportunity_mail', raise_if_not_found=False)
+        ctx = {
+            'default_model': 'crm.lead',
+            'default_res_ids': self.ids,
+            'default_composition_mode': 'comment',
+            'default_use_template': bool(template_id),
+            'default_template_id': template_id,
+            'force_email': True,
+        }
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Compose Email',
+            'view_mode': 'form',
+            'res_model': 'mail.compose.message',
+            'views': [(False, 'form')],
+            'view_id': False,
+            'target': 'new',
+            'context': ctx,
+        }
+
+    def action_send_sms_composer(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Send SMS',
+            'view_mode': 'form',
+            'res_model': 'sms.composer',
+            'target': 'new',
+            'context': {
+                'default_res_model': 'crm.lead',
+                'default_res_id': self.id,
+                'default_number_field_name': 'phone',
+                'default_composition_mode': 'comment',
+            },
+        }
 
     # ── ERPNext Legacy Fields ──────────────────────────────────────────────────
     custom_naming_series   = fields.Char(string='Legacy ID (ERPNext)')

@@ -67,6 +67,10 @@
         <field name="model">crm.lead</field>
         <field name="inherit_id" ref="crm.crm_case_tree_view_leads"/>
         <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="default_order">priority desc, create_date desc</attribute>
+                <attribute name="limit">1000</attribute>
+            </xpath>
             <xpath expr="//field[@name='name']" position="after">
                 <field name="last_chatter" string="Last Chatter" optional="show"/>
                 <field name="date_deadline" string="Deadline" optional="show"/>
@@ -75,35 +79,89 @@
         </field>
     </record>
 
-    <!-- Opportunities Tree View Extension as well -->
-    <record id="crm_opportunity_view_tree_inherit_custom" model="ir.ui.view">
-        <field name="name">crm.opportunity.tree.inherit.custom</field>
+    <!-- Clean Opportunities Tree / List View (Free of inline action buttons) -->
+    <record id="crm_lead_view_tree_pipeline_custom" model="ir.ui.view">
+        <field name="name">crm.lead.tree.pipeline.custom</field>
         <field name="model">crm.lead</field>
-        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
+        <field name="priority">1</field>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='name']" position="after">
-                <field name="crm_product_id" string="Product Interest" optional="show" />
-            </xpath>
-            <xpath expr="//field[@name='activity_ids']" position="attributes">
-                <attribute name="invisible">1</attribute>
-            </xpath>
-            <xpath expr="//field[@name='activity_ids']" position="after">
+            <list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" js_class="crm_business_cards_scanner_list" default_order="create_date desc, id desc" limit="1000">
+                <header>
+                    <button name="723" type="action" string="Mark Lost"/>
+                    <button name="733" type="action" string="Email"/>
+                </header>
+                <field name="company_id" column_invisible="True"/>
+                <field name="user_company_ids" column_invisible="True"/>
+                <field name="date_deadline" column_invisible="True"/>
+                <field name="activity_calendar_event_id" column_invisible="True"/>
+                <field name="won_status" column_invisible="True"/>
+                <field name="create_date" optional="hide"/>
+                <field name="create_uid" string="Created By" optional="hide"/>
+                <field name="name" string="Opportunity" readonly="1" optional="hide"/>
+                <field name="crm_product_id" string="Product Interest" optional="show"/>
+                <field name="partner_id" optional="hide" string="Contact"/>
+                <field name="contact_name" optional="hide" string="Contact Name"/>
+                <field name="email_from" optional="hide" string="Email"/>
+                <field name="phone" optional="hide" class="o_force_ltr"/>
+                <field name="city" optional="hide"/>
+                <field name="state_id" optional="hide"/>
+                <field name="country_id" optional="hide" options="{'no_open': True, 'no_create': True}"/>
+                <field name="user_id" widget="many2one_avatar_user" optional="show" domain="[('share', '=', False)]"/>
+                <field name="team_id" optional="hide"/>
+                <field name="priority" optional="hide" widget="priority"/>
                 <field name="last_chatter" string="Activities" optional="show"/>
-            </xpath>
-            <xpath expr="//field[@name='date_deadline']" position="attributes">
-                <attribute name="optional">show</attribute>
-                <attribute name="string">Deadline</attribute>
-            </xpath>
+                <field name="activity_user_id" optional="hide" string="Activity by" widget="many2one_avatar_user"/>
+                <field name="my_activity_date_deadline" optional="hide" string="My Deadline" widget="remaining_days" options="{'allow_order': '1'}"/>
+                <field name="campaign_id" optional="hide"/>
+                <field name="medium_id" optional="hide"/>
+                <field name="source_id" optional="hide"/>
+                <field name="company_currency" column_invisible="True"/>
+                <field name="expected_revenue" sum="Expected Revenues" optional="show" widget="monetary" options="{'currency_field': 'company_currency'}"/>
+                <field name="stage_id_color" column_invisible="1"/>
+                <field name="stage_id" optional="show" widget="badge_rotting" options="{'no_open': True}" string="Stage"/>
+                <field name="active" column_invisible="True"/>
+                <field name="probability" string="Probability (%)" optional="hide"/>
+                <field name="lost_reason_id" optional="hide"/>
+                <field name="tag_ids" optional="hide" widget="many2many_tags" options="{'color_field': 'color'}"/>
+                <field name="referred" column_invisible="True"/>
+                <field name="message_needaction" column_invisible="True"/>
+                <field name="lead_properties"/>
+                <field name="is_rotting" column_invisible="True"/>
+                <field name="rotting_days" column_invisible="True"/>
+            </list>
         </field>
     </record>
 
-    <!-- Inherit Search Filter for Opportunities: Add Deadline Filters -->
+    <!-- Inherit Search Filter for Opportunities: Add Deadline, Created By & Creation Date Filters -->
     <record id="crm_lead_view_search_inherit_custom_deadlines" model="ir.ui.view">
         <field name="name">crm.lead.search.inherit.custom.deadlines</field>
         <field name="model">crm.lead</field>
         <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter"/>
         <field name="arch" type="xml">
+            <xpath expr="//field[@name='user_id']" position="after">
+                <field name="create_uid" string="Created By"/>
+            </xpath>
             <xpath expr="//filter[@name='assigned_to_me']" position="after">
+                <separator/>
+                <!-- User Assignment & Creator Filters -->
+                <filter string="Created by Me" name="created_by_me" domain="[('create_uid', '=', uid)]"/>
+                <separator/>
+                <!-- Creation Date Filters -->
+                <filter string="Created: Today" name="created_today"
+                        domain="[('create_date', '&gt;=', context_today().strftime('%Y-%m-%d 00:00:00')),
+                                 ('create_date', '&lt;=', context_today().strftime('%Y-%m-%d 23:59:59'))]"/>
+                <filter string="Created: Yesterday" name="created_yesterday"
+                        domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d 00:00:00')),
+                                 ('create_date', '&lt;=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d 23:59:59'))]"/>
+                <filter string="Created: Last 7 Days" name="created_last_7_days"
+                        domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d 00:00:00'))]"/>
+                <filter string="Created: Last 2 Weeks (14 Days)" name="created_last_14_days"
+                        domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=14)).strftime('%Y-%m-%d 00:00:00'))]"/>
+                <filter string="Created: Last 21 Days" name="created_last_21_days"
+                        domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=21)).strftime('%Y-%m-%d 00:00:00'))]"/>
+                <filter string="Created: Last Month (30 Days)" name="created_last_month"
+                        domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=30)).strftime('%Y-%m-%d 00:00:00'))]"/>
+                <filter string="Creation Date (Date Drilldown)" name="filter_create_date_drilldown" date="create_date"/>
                 <separator/>
                 <!-- User Deadline Filters -->
                 <filter string="My Deadline: Today" name="my_deadline_today"
@@ -133,21 +191,41 @@
                 <filter string="Deadline (Date Drilldown)" name="filter_activity_date_deadline" date="activity_date_deadline"/>
                 <separator/>
             </xpath>
+            <xpath expr="//group" position="inside">
+                <filter string="Created By" name="group_by_create_uid" context="{'group_by': 'create_uid'}"/>
+                <filter string="Salesperson" name="group_by_salesperson" context="{'group_by': 'user_id'}"/>
+                <filter string="Creation Date: Day (Latest First)" name="group_by_create_date_day_desc" context="{'group_by':'create_date:day', 'orderedBy': [{'name': 'create_date', 'asc': False}]}"/>
+                <filter string="Creation Date: Month (Latest First)" name="group_by_create_date_month_desc" context="{'group_by':'create_date:month', 'orderedBy': [{'name': 'create_date', 'asc': False}]}"/>
+            </xpath>
         </field>
     </record>
 
-    <!-- Default Pipeline Actions to List View by Default -->
+    <!-- Default Pipeline Actions to List View with Auto-Filters and Limit 1000 -->
     <record id="crm.crm_lead_action_pipeline" model="ir.actions.act_window">
         <field name="view_mode">list,kanban,graph,pivot,calendar,activity,form</field>
+        <field name="limit">1000</field>
+        <field name="context">{
+            'default_type': 'opportunity',
+            'show_user_team_stages': 1,
+            'search_default_deadline_today': 1 if uid in (1, 2) else 0,
+            'search_default_my_deadline_today': 1 if uid not in (1, 2) else 0,
+        }</field>
     </record>
 
     <record id="crm.crm_lead_opportunities" model="ir.actions.act_window">
         <field name="view_mode">list,kanban,graph,pivot,calendar,activity,form</field>
+        <field name="limit">1000</field>
+        <field name="context">{
+            'default_type': 'opportunity',
+            'search_default_deadline_today': 1 if uid in (1, 2) else 0,
+            'search_default_my_deadline_today': 1 if uid not in (1, 2) else 0,
+        }</field>
     </record>
 
     <record id="crm.crm_lead_action_pipeline_view_tree" model="ir.actions.act_window.view">
         <field name="sequence" eval="1"/>
         <field name="view_mode">list</field>
+        <field name="view_id" ref="crm_lead_view_tree_pipeline_custom"/>
         <field name="act_window_id" ref="crm.crm_lead_action_pipeline"/>
     </record>
 

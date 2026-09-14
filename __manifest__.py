@@ -15,6 +15,8 @@
         'wizard/crm_import_wizard_views.xml',
         'views/crm_product_views.xml',
         'views/todo_task_views.xml',
+        'views/crm_activity_log_views.xml',
+        'views/crm_hourly_activity_log_views.xml',
         'views/crm_lead_views.xml',
     ],
     'installable': True,
