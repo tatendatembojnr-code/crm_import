@@ -1,5 +1,13 @@
 from odoo import models, fields, api
 
+# Quick-message buttons: status key -> (button label, log sentence)
+QUICK_RESPONSES = {
+    'no_answer': ('No Answer', 'The customer did not answer'),
+    'not_reachable': ('Not Reachable', 'The customer is not reachable'),
+    'no_first_call': ('No Answer (1st Call)', 'The customer did not answer the first call'),
+}
+
+
 class CrmLead(models.Model):
     _inherit = 'crm.lead'
     _order = 'priority desc, create_date desc, id desc'
@@ -123,6 +131,70 @@ class CrmLead(models.Model):
 
     # Preserve actual dates from the old system
     legacy_create_date     = fields.Datetime(string='Original Creation Date')
+
+    # Next Contact & Quick Responses
+    custom_next_contact_date = fields.Date(string="Next Contact Date", tracking=True, default=fields.Date.context_today)
+    custom_response_status = fields.Selection([
+        ('normal', 'Normal Response'),
+        ('no_answer', 'No Answer'),
+        ('not_reachable', 'Not Reachable'),
+        ('no_first_call', 'Not Answering First Time Call'),
+    ], string='Response Status', default='normal', tracking=True)
+
+    def action_set_response_no_answer(self):
+        return self._open_quick_response_wizard('no_answer')
+
+    def action_set_response_not_reachable(self):
+        return self._open_quick_response_wizard('not_reachable')
+
+    def action_set_response_no_first_call(self):
+        return self._open_quick_response_wizard('no_first_call')
+
+    def _open_quick_response_wizard(self, status):
+        """Open the standard 'Schedule an Activity' dialog pre-filled for a quick response."""
+        self.ensure_one()
+        from datetime import timedelta
+        label, log_sentence = QUICK_RESPONSES.get(status, (status, 'Follow-up scheduled'))
+        tomorrow = fields.Date.context_today(self) + timedelta(days=1)
+
+        activity_type = self.env['mail.activity.type'].search([
+            '|', ('res_model', '=', False), ('res_model', '=', 'crm.lead'),
+            ('category', 'in', ['default', 'phonecall'])
+        ], limit=1)
+
+        ctx = {
+            'active_model': 'crm.lead',
+            'active_ids': self.ids,
+            'active_id': self.id,
+            'crm_quick_response': status,
+            'crm_quick_response_label': label,
+            'crm_quick_response_log': log_sentence,
+            'default_summary': label,
+            'default_date_deadline': tomorrow,
+            'dialog_size': 'large',
+        }
+        if activity_type:
+            ctx['default_activity_type_id'] = activity_type.id
+        if self.user_id:
+            ctx['default_activity_user_id'] = self.user_id.id
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': f'Schedule an Activity - {label}',
+            'res_model': 'mail.activity.schedule',
+            'view_mode': 'form',
+            'views': [(False, 'form')],
+            'target': 'new',
+            'context': ctx,
+        }
+
+    @api.constrains('active', 'probability', 'custom_next_contact_date')
+    def _check_mandatory_next_contact_date(self):
+        from odoo.exceptions import ValidationError
+        for lead in self:
+            if lead.active and lead.probability > 0 and not lead.custom_next_contact_date:
+                raise ValidationError("Next Contact Date is mandatory for all active leads unless they are marked as Lost!")
+
 
     # Link to To-Do tasks
     todo_ids = fields.One2many('todo.task', 'lead_id', string='To-Do Tasks')
