@@ -9,6 +9,7 @@
 
             <!-- Add Quick Response Buttons to Header -->
             <xpath expr="//header" position="inside">
+                <button name="action_schedule_next_contact" type="object" string="Next Contact" icon="fa-calendar" class="btn-primary" invisible="not active or probability == 0"/>
                 <button name="action_set_response_no_answer" type="object" string="No Answer" class="btn-secondary" invisible="not active or probability == 0"/>
                 <button name="action_set_response_not_reachable" type="object" string="Not Reachable" class="btn-secondary" invisible="not active or probability == 0"/>
                 <button name="action_set_response_no_first_call" type="object" string="No Answer (1st Call)" class="btn-secondary" invisible="not active or probability == 0"/>
@@ -41,7 +42,11 @@
                         <field name="priority" widget="priority"/>
                         <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color', 'no_create_edit': True}"/>
                         <field name="last_chatter" string="Last Chatter" readonly="1"/>
-                        <field name="custom_next_contact_date" string="Next Contact Date"/>
+                        <label for="custom_next_contact_date" string="Next Contact Date"/>
+                        <div class="d-flex align-items-center gap-1">
+                            <field name="custom_next_contact_date" class="oe_inline" required="active and probability &gt; 0"/>
+                            <button name="action_schedule_next_contact" type="object" string="Schedule Activity" icon="fa-calendar-plus-o" class="btn btn-sm btn-outline-primary oe_inline" title="Schedule Activity Pop-up"/>
+                        </div>
                         <field name="custom_response_status" string="Response Status"/>
                         <field name="custom_deal_size" string="Deal Size $"/>
                         <field name="custom_quote" string="Quote"/>

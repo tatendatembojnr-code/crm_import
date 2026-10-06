@@ -14,8 +14,11 @@ class MailActivitySchedule(models.TransientModel):
         if qr:
             res['crm_quick_response'] = qr
             label = self.env.context.get('crm_quick_response_label')
+            # The director requested task name (Summary) to be To-Do instead of No Answer
+            res['summary'] = _('To-Do')
+            # The log note will contain the No Answer / quick response details
             if label:
-                res['summary'] = label
+                res['note'] = f'<p>{label}</p>'
             tomorrow = fields.Date.context_today(self) + timedelta(days=1)
             res['date_deadline'] = tomorrow
         return res
@@ -23,10 +26,9 @@ class MailActivitySchedule(models.TransientModel):
     @api.depends('activity_type_id')
     def _compute_summary(self):
         super()._compute_summary()
-        qr_label = self.env.context.get('crm_quick_response_label')
         for record in self:
-            if (record.crm_quick_response or self.env.context.get('crm_quick_response')) and qr_label:
-                record.summary = qr_label
+            if record.crm_quick_response or self.env.context.get('crm_quick_response'):
+                record.summary = _('To-Do')
 
     def action_quick_schedule_tomorrow(self):
         target = fields.Date.context_today(self) + timedelta(days=1)
@@ -57,6 +59,10 @@ class MailActivitySchedule(models.TransientModel):
 
         deadline = self.date_deadline or fields.Date.context_today(self)
         qr_status = self.crm_quick_response or self.env.context.get('crm_quick_response')
+        label = self.env.context.get('crm_quick_response_label') or qr_status
+
+        # Ensure task name is To-Do
+        self.summary = _('To-Do')
 
         if self.res_model == 'crm.lead':
             leads = self._get_applied_on_records()
@@ -67,16 +73,16 @@ class MailActivitySchedule(models.TransientModel):
                 log_prefix = self.env.context.get('crm_quick_response_log')
                 if not log_prefix:
                     if qr_status == 'no_answer':
-                        log_prefix = "The customer did not answer. I will try again"
+                        log_prefix = "The customer did not answer"
                     elif qr_status == 'not_reachable':
-                        log_prefix = "The customer is not reachable. I will try again"
+                        log_prefix = "The customer is not reachable"
                     elif qr_status == 'no_first_call':
-                        log_prefix = "The customer did not answer (1st Call). I will try again"
+                        log_prefix = "The customer did not answer (1st Call)"
                     else:
                         log_prefix = "Follow-up scheduled"
 
-                feedback_msg = f"{log_prefix} on {deadline}."
-                if self.note and self.note.strip() and self.note.strip() not in ('<p><br></p>', '<p></p>'):
+                feedback_msg = f"<strong>{label}:</strong> {log_prefix}. Next contact scheduled on {deadline}."
+                if self.note and self.note.strip() and self.note.strip() not in ('<p><br></p>', '<p></p>', f'<p>{label}</p>'):
                     feedback_msg += f"<br/><strong>Note:</strong> {self.note}"
 
                 if existing_activities:

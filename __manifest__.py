@@ -1,6 +1,6 @@
 {
     'name': 'CRM Import',
-    'version': '1.2',
+    'version': '1.3',
     'category': 'Sales/CRM',
     'summary': 'Clean, fast UI Wizard to import Users, Leads, and To-Dos from CSV.',
     'description': """
