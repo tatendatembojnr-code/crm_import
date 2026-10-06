@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- List / Tree View for Activity Log: 1 Row per Salesperson -->
+    <!-- List / Tree View for Activity Log -->
     <record id="crm_activity_log_view_tree" model="ir.ui.view">
         <field name="name">crm.activity.log.list</field>
         <field name="model">crm.activity.log</field>
         <field name="arch" type="xml">
-            <list string="Activity Log" default_order="total_count desc, new_leads_count desc" create="0" delete="0" edit="0">
+            <list string="Activity Log" default_order="activity_date desc, total_count desc" create="0" delete="0" edit="0">
+                <field name="activity_date" string="Date" optional="hide"/>
                 <field name="user_id" widget="many2one_avatar_user" string="Salesperson"/>
                 <field name="new_leads_count" string="New Leads" sum="Total New Leads"/>
                 <field name="updated_leads_count" string="Updated Leads" sum="Total Updated Leads"/>
@@ -14,28 +15,45 @@
         </field>
     </record>
 
-    <!-- Search View for Activity Log -->
+    <!-- Search View for Activity Log with Seeded Filters -->
     <record id="crm_activity_log_view_search" model="ir.ui.view">
         <field name="name">crm.activity.log.search</field>
         <field name="model">crm.activity.log</field>
         <field name="arch" type="xml">
             <search string="Search Activity Log">
                 <field name="user_id" string="Salesperson"/>
+                <field name="activity_date" string="Date"/>
                 <separator/>
-                <filter string="My Activities" name="my_activities"
-                        domain="[('user_id', '=', uid)]"/>
+                <filter string="My Activities" name="my_activities" domain="[('user_id', '=', uid)]"/>
+                <separator/>
+                <!-- Activity Date Filters -->
+                <filter string="Today" name="today" domain="[('activity_date', '=', 'today')]"/>
+                <filter string="Yesterday" name="yesterday" domain="[('activity_date', '=', 'today -1d')]"/>
+                <filter string="Last 7 Days" name="last_7_days" domain="[('activity_date', '&gt;=', 'today -7d')]"/>
+                <filter string="Last 2 Weeks (14 Days)" name="last_14_days" domain="[('activity_date', '&gt;=', 'today -14d')]"/>
+                <filter string="Last 21 Days" name="last_21_days" domain="[('activity_date', '&gt;=', 'today -21d')]"/>
+                <filter string="Last Month (30 Days)" name="last_month" domain="[('activity_date', '&gt;=', 'today -30d')]"/>
+                <filter string="This Month" name="this_month" domain="[('activity_date', '&gt;=', '=month_start'), ('activity_date', '&lt;', '=month_start +1m')]"/>
+                <filter string="This Year" name="this_year" domain="[('activity_date', '&gt;=', '=year_start'), ('activity_date', '&lt;', '=year_start +1y')]"/>
+                <filter string="Activity Date (Date Drilldown)" name="filter_activity_date_drilldown" date="activity_date"/>
+                <separator/>
+                <group>
+                    <filter string="Salesperson" name="group_by_salesperson" context="{'group_by': 'user_id'}"/>
+                    <filter string="Activity Date: Day (Latest First)" name="group_by_activity_date_day_desc" context="{'group_by':'activity_date:day', 'orderedBy': [{'name': 'activity_date', 'asc': False}]}"/>
+                    <filter string="Activity Date: Month (Latest First)" name="group_by_activity_date_month_desc" context="{'group_by':'activity_date:month', 'orderedBy': [{'name': 'activity_date', 'asc': False}]}"/>
+                </group>
             </search>
         </field>
     </record>
 
-    <!-- Window Action for Activity Log -->
+    <!-- Window Action for Activity Log (Defaults to Today) -->
     <record id="action_crm_activity_log" model="ir.actions.act_window">
         <field name="name">Activity Log</field>
         <field name="res_model">crm.activity.log</field>
         <field name="view_mode">list</field>
         <field name="view_id" ref="crm_activity_log_view_tree"/>
         <field name="search_view_id" ref="crm_activity_log_view_search"/>
-        <field name="context">{}</field>
+        <field name="context">{'search_default_today': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Salesperson Activity Log
