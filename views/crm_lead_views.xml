@@ -7,6 +7,10 @@
         <field name="inherit_id" ref="crm.crm_lead_view_form"/>
         <field name="arch" type="xml">
 
+            <xpath expr="//form" position="attributes">
+                <attribute name="js_class">crm_lead_form</attribute>
+            </xpath>
+
             <!-- Add Quick Response Buttons to Header -->
             <xpath expr="//header" position="inside">
                 <button name="action_set_response_no_answer" type="object" string="No Answer" class="btn-secondary" invisible="not active or probability == 0"/>
@@ -41,7 +45,7 @@
                         <field name="priority" widget="priority"/>
                         <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color', 'no_create_edit': True}"/>
                         <field name="last_chatter" string="Last Chatter" readonly="1"/>
-                        <field name="custom_next_contact_date" string="Next Contact Date" required="1"/>
+                        <field name="custom_next_contact_date" string="Next Contact Date"/>
                         <field name="custom_response_status" string="Response Status"/>
                         <field name="custom_deal_size" string="Deal Size $"/>
                         <field name="custom_quote" string="Quote"/>

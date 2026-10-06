@@ -1,6 +1,6 @@
 {
     'name': 'CRM Import',
-    'version': '1.5',
+    'version': '1.6',
     'category': 'Sales/CRM',
     'summary': 'Clean, fast UI Wizard to import Users, Leads, and To-Dos from CSV.',
     'description': """
@@ -20,6 +20,11 @@
         'views/crm_lead_views.xml',
         'views/mail_activity_schedule_views.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'crm_import/static/src/views/**/*',
+        ],
+    },
     'installable': True,
     'application': False,
 }

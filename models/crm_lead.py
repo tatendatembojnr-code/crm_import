@@ -250,14 +250,7 @@ class CrmLead(models.Model):
             'context': ctx,
         }
 
-    @api.constrains('active', 'custom_next_contact_date')
-    def _check_mandatory_next_contact_date(self):
-        from odoo.exceptions import ValidationError
-        for lead in self:
-            if self.env.context.get('install_mode') or self.env.context.get('skip_next_contact_check'):
-                continue
-            if lead.active and not lead.custom_next_contact_date:
-                raise ValidationError("Next Contact Date is mandatory! Please specify a Next Contact Date before saving.")
+
 
 
     # Link to To-Do tasks
