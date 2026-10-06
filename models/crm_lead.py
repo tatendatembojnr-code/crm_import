@@ -39,12 +39,9 @@ class CrmLead(models.Model):
         )
     @api.model_create_multi
     def create(self, vals_list):
-        from datetime import timedelta
         for vals in vals_list:
             if not vals.get('user_id'):
                 vals['user_id'] = self.env.uid
-            if not vals.get('custom_next_contact_date') and vals.get('active', True) and vals.get('probability', 1) > 0:
-                vals['custom_next_contact_date'] = fields.Date.context_today(self) + timedelta(days=1)
         leads = super().create(vals_list)
         for lead in leads:
             lead._ensure_lead_activity()
@@ -60,7 +57,7 @@ class CrmLead(models.Model):
     def _ensure_lead_activity(self):
         """Ensure that every active lead with a Next Contact Date has a matching open To-Do activity."""
         self.ensure_one()
-        if not self.active or self.probability == 0:
+        if not self.active:
             return
 
         target_date = self.custom_next_contact_date
@@ -177,7 +174,7 @@ class CrmLead(models.Model):
     legacy_create_date     = fields.Datetime(string='Original Creation Date')
 
     # Next Contact & Quick Responses
-    custom_next_contact_date = fields.Date(string="Next Contact Date", tracking=True, default=fields.Date.context_today)
+    custom_next_contact_date = fields.Date(string="Next Contact Date", tracking=True)
     custom_response_status = fields.Selection([
         ('normal', 'Normal Response'),
         ('no_answer', 'No Answer'),
@@ -193,43 +190,6 @@ class CrmLead(models.Model):
 
     def action_set_response_no_first_call(self):
         return self._open_quick_response_wizard('no_first_call')
-
-    def action_schedule_next_contact(self):
-        """Open the Activity Schedule pop-up dialog pre-filled with To-Do and Next Contact Date."""
-        self.ensure_one()
-        from datetime import timedelta
-        tomorrow = fields.Date.context_today(self) + timedelta(days=1)
-        target_date = self.custom_next_contact_date or tomorrow
-
-        todo_type = self.env.ref('mail.mail_activity_data_todo', raise_if_not_found=False)
-        if not todo_type:
-            todo_type = self.env['mail.activity.type'].search([
-                '|', ('res_model', '=', False), ('res_model', '=', 'crm.lead'),
-                ('category', '=', 'default')
-            ], limit=1)
-
-        ctx = {
-            'active_model': 'crm.lead',
-            'active_ids': self.ids,
-            'active_id': self.id,
-            'default_summary': 'To-Do',
-            'default_date_deadline': target_date,
-            'dialog_size': 'large',
-        }
-        if todo_type:
-            ctx['default_activity_type_id'] = todo_type.id
-        if self.user_id:
-            ctx['default_activity_user_id'] = self.user_id.id
-
-        return {
-            'type': 'ir.actions.act_window',
-            'name': 'Schedule an Activity',
-            'res_model': 'mail.activity.schedule',
-            'view_mode': 'form',
-            'views': [(False, 'form')],
-            'target': 'new',
-            'context': ctx,
-        }
 
     def _open_quick_response_wizard(self, status):
         """Open the standard 'Schedule an Activity' dialog pre-filled for a quick response."""
@@ -272,14 +232,14 @@ class CrmLead(models.Model):
             'context': ctx,
         }
 
-    @api.constrains('active', 'probability', 'custom_next_contact_date')
+    @api.constrains('active', 'custom_next_contact_date')
     def _check_mandatory_next_contact_date(self):
         from odoo.exceptions import ValidationError
         for lead in self:
-            if lead.active and lead.probability > 0:
-                has_activity = bool(lead.activity_ids.filtered(lambda a: a.date_deadline))
-                if not lead.custom_next_contact_date and not has_activity:
-                    raise ValidationError("Next Contact Date is mandatory! Every active lead must have a Next Contact Date and scheduled activity.")
+            if self.env.context.get('install_mode') or self.env.context.get('skip_next_contact_check'):
+                continue
+            if lead.active and not lead.custom_next_contact_date:
+                raise ValidationError("Next Contact Date is mandatory! Please specify a Next Contact Date before saving.")
 
 
     # Link to To-Do tasks
