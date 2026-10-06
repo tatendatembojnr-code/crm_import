@@ -1,6 +1,6 @@
 {
     'name': 'CRM Import',
-    'version': '1.1',
+    'version': '1.2',
     'category': 'Sales/CRM',
     'summary': 'Clean, fast UI Wizard to import Users, Leads, and To-Dos from CSV.',
     'description': """
@@ -18,6 +18,7 @@
         'views/crm_activity_log_views.xml',
         'views/crm_hourly_activity_log_views.xml',
         'views/crm_lead_views.xml',
+        'views/mail_activity_schedule_views.xml',
     ],
     'installable': True,
     'application': False,
