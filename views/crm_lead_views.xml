@@ -102,8 +102,8 @@
         <field name="arch" type="xml">
             <list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" js_class="crm_business_cards_scanner_list" default_order="create_date desc, id desc" limit="1000">
                 <header>
-                    <button name="723" type="action" string="Mark Lost"/>
-                    <button name="733" type="action" string="Email"/>
+                    <button name="%(crm.crm_lead_lost_action)d" type="action" string="Mark Lost"/>
+                    <button name="%(crm.action_lead_mass_mail)d" type="action" string="Email"/>
                 </header>
                 <field name="company_id" column_invisible="True"/>
                 <field name="user_company_ids" column_invisible="True"/>
