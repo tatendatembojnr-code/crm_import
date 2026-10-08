@@ -22,8 +22,6 @@ export class CrmLeadFormController extends FormController {
                         active_model: "crm.lead",
                         active_id: record.resId,
                         active_ids: [record.resId],
-                        default_summary: "To-Do",
-                        default_note: "<p>Next Contact Date</p>",
                         dialog_size: "large",
                     },
                 }, {

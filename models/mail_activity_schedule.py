@@ -98,7 +98,7 @@ class MailActivitySchedule(models.TransientModel):
                 vals = {'custom_next_contact_date': deadline}
                 if qr_status:
                     vals['custom_response_status'] = qr_status
-                lead.write(vals)
+                lead.with_context(skip_ensure_activity=True).write(vals)
 
         # 4. Schedule the new activity
         return self._action_schedule_activities()

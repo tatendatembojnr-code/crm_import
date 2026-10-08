@@ -49,41 +49,35 @@ class CrmLead(models.Model):
 
     def write(self, vals):
         res = super().write(vals)
-        if any(f in vals for f in ('custom_next_contact_date', 'user_id', 'active', 'probability')):
-            for lead in self:
-                lead._ensure_lead_activity()
+        if not self.env.context.get('skip_ensure_activity'):
+            if 'custom_next_contact_date' in vals and vals.get('custom_next_contact_date'):
+                for lead in self:
+                    lead._ensure_lead_activity()
         return res
 
     def _ensure_lead_activity(self):
-        """Ensure that every active lead with a Next Contact Date has a matching open To-Do activity and chatter log note."""
+        """Ensure that every active lead with a Next Contact Date has a matching open activity without overriding user summary or note."""
         self.ensure_one()
-        if not self.active:
+        if not self.active or self.env.context.get('skip_ensure_activity'):
             return
 
         target_date = self.custom_next_contact_date
         if not target_date:
             return
 
-        todo_type = self.env.ref('mail.mail_activity_data_todo', raise_if_not_found=False)
-        if not todo_type:
-            todo_type = self.env['mail.activity.type'].search([
-                '|', ('res_model', '=', False), ('res_model', '=', 'crm.lead'),
-                ('category', '=', 'default')
-            ], limit=1)
-
         open_activities = self.activity_ids.filtered(lambda a: a.date_deadline)
         if open_activities:
-            for act in open_activities:
-                vals = {}
-                if act.date_deadline != target_date:
-                    vals['date_deadline'] = target_date
-                if act.summary != 'To-Do':
-                    vals['summary'] = 'To-Do'
-                if not act.note or 'Next Contact Date' not in act.note:
-                    vals['note'] = '<p>Next Contact Date</p>'
-                if vals:
-                    act.sudo().write(vals)
+            # Preserve user summary, note, and feedback! Never overwrite them.
+            if not any(a.date_deadline == target_date for a in open_activities):
+                open_activities[0].sudo().write({'date_deadline': target_date})
         else:
+            todo_type = self.env.ref('mail.mail_activity_data_todo', raise_if_not_found=False)
+            if not todo_type:
+                todo_type = self.env['mail.activity.type'].search([
+                    '|', ('res_model', '=', False), ('res_model', '=', 'crm.lead'),
+                    ('category', '=', 'default')
+                ], limit=1)
+
             self.env['mail.activity'].sudo().create({
                 'res_model_id': self.env['ir.model']._get_id('crm.lead'),
                 'res_id': self.id,
@@ -91,17 +85,8 @@ class CrmLead(models.Model):
                 'summary': 'To-Do',
                 'date_deadline': target_date,
                 'user_id': self.user_id.id if self.user_id else self.env.uid,
-                'note': '<p>Next Contact Date</p>',
+                'note': '<p>Scheduled follow-up</p>',
             })
-
-        # Post log note in chatter
-        formatted_date = target_date.strftime('%d/%m/%Y') if hasattr(target_date, 'strftime') else str(target_date)
-        log_body = f"<strong>Next Contact Date:</strong> {formatted_date}"
-        recent_msg = self.message_ids.filtered(
-            lambda m: m.subtype_id == self.env.ref('mail.mt_note', raise_if_not_found=False) and log_body in (m.body or '')
-        )
-        if not recent_msg:
-            self.message_post(body=log_body, subtype_xmlid='mail.mt_note')
 
     def action_send_email_composer(self):
         self.ensure_one()
