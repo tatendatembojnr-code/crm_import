@@ -1,14 +1,21 @@
 {
-    'name': 'CRM Import',
-    'version': '1.7',
+    'name': 'CRM Live Intelligence & Overdue Tasks',
+    'version': '1.8',
     'category': 'Sales/CRM',
-    'summary': 'Clean, fast UI Wizard to import Users, Leads, and To-Dos from CSV.',
+    'summary': 'Live "Updated On" sorting, overdue activity auditing, product interest requirement & fast CSV import wizard.',
     'description': """
-        This module provides a UI wizard to import data from legacy systems.
-        It defines custom fields to preserve data integrity and includes logic
-        to skip existing records for speed.
+CRM Live Intelligence & Overdue Tasks
+=====================================
+* Live Updated Leads tracking across the company with accurate write_date/write_uid synchronization.
+* Overdue and pending activity monitoring with automated auditing.
+* Mandatory Product Interest field requirement for qualified lead intake.
+* Hourly activity logs and chatter tracking.
+* Fast CSV wizard to import Users, Leads, Opportunities, and To-Dos with deduplication.
     """,
-    'depends': ['crm'],
+    'author': 'DraftPOS / Havano Solutions',
+    'website': 'https://draftpos.com',
+    'license': 'LGPL-3',
+    'depends': ['crm', 'mail'],
     'data': [
         'security/ir.model.access.csv',
         'data/crm_product_data.xml',
@@ -25,6 +32,8 @@
             'crm_import/static/src/views/**/*',
         ],
     },
+    'images': ['static/description/icon.png'],
     'installable': True,
-    'application': False,
+    'application': True,
 }
+
