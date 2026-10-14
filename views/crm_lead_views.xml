@@ -148,7 +148,7 @@
         <field name="model">crm.lead</field>
         <field name="priority">1</field>
         <field name="arch" type="xml">
-            <list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" js_class="crm_business_cards_scanner_list" default_order="write_date desc, id desc" limit="1000">
+            <list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" default_order="write_date desc, id desc" limit="1000">
                 <header>
                     <button name="%(crm.crm_lead_lost_action)d" type="action" string="Mark Lost"/>
                     <button name="%(crm.action_lead_mass_mail)d" type="action" string="Email"/>
@@ -316,7 +316,7 @@
         <field name="model">crm.lead</field>
         <field name="priority">20</field>
         <field name="arch" type="xml">
-            <list string="Updated Opportunities" sample="1" multi_edit="1" js_class="crm_business_cards_scanner_list" default_order="write_date desc, id desc">
+            <list string="Updated Opportunities" sample="1" multi_edit="1" default_order="write_date desc, id desc">
                 <header>
                     <button name="%(crm.crm_lead_lost_action)d" type="action" string="Mark Lost"/>
                     <button name="%(crm.action_lead_mass_mail)d" type="action" string="Email"/>
@@ -347,7 +347,7 @@
         <field name="model">crm.lead</field>
         <field name="priority">20</field>
         <field name="arch" type="xml">
-            <list string="Overdue Leads" sample="1" multi_edit="1" js_class="crm_business_cards_scanner_list" default_order="priority desc, create_date desc, id desc">
+            <list string="Overdue Leads" sample="1" multi_edit="1" default_order="priority desc, create_date desc, id desc">
                 <header>
                     <button name="%(crm.crm_lead_lost_action)d" type="action" string="Mark Lost"/>
                     <button name="%(crm.action_lead_mass_mail)d" type="action" string="Email"/>
