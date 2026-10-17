@@ -121,7 +121,7 @@
                 <attribute name="limit">1000</attribute>
             </xpath>
             <xpath expr="//field[@name='create_date']" position="after">
-                <field name="write_date" string="Updated On" optional="hide"/>
+                <field name="write_date" string="Updated On" optional="show"/>
             </xpath>
             <xpath expr="//field[@name='phone']" position="attributes">
                 <attribute name="optional">show</attribute>
@@ -138,6 +138,49 @@
                 <field name="last_chatter" string="Last Chatter" optional="show"/>
                 <field name="my_activity_date_deadline" string="Activity Deadline" widget="remaining_days" optional="show"/>
                 <field name="date_deadline" string="Expected Closing" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Opportunities List View to enforce write_date desc order and show Updated On -->
+    <record id="crm_lead_view_tree_oppor_inherit_order" model="ir.ui.view">
+        <field name="name">crm.lead.tree.oppor.inherit.order</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
+        <field name="priority">1</field>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="default_order">write_date desc, id desc</attribute>
+                <attribute name="limit">1000</attribute>
+            </xpath>
+            <xpath expr="//field[@name='create_date']" position="after">
+                <field name="write_date" string="Updated On" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Pipeline Kanban View to order cards by last updated (write_date desc) -->
+    <record id="crm_lead_view_kanban_inherit_order" model="ir.ui.view">
+        <field name="name">crm.lead.kanban.inherit.order</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_kanban_view_leads"/>
+        <field name="priority">1</field>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="default_order">write_date desc, id desc</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Leads Kanban View to order cards by last updated (write_date desc) -->
+    <record id="crm_lead_view_kanban_lead_inherit_order" model="ir.ui.view">
+        <field name="name">crm.lead.kanban.lead.inherit.order</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_lead_kanban"/>
+        <field name="priority">1</field>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="default_order">write_date desc, id desc</attribute>
             </xpath>
         </field>
     </record>
@@ -159,7 +202,7 @@
                 <field name="activity_calendar_event_id" column_invisible="True"/>
                 <field name="won_status" column_invisible="True"/>
                 <field name="create_date" optional="hide"/>
-                <field name="write_date" string="Updated On" optional="hide"/>
+                <field name="write_date" string="Updated On" optional="show"/>
                 <field name="create_uid" string="Created By" optional="hide"/>
                 <field name="name" string="Opportunity" readonly="1" optional="hide"/>
                 <field name="crm_product_id" string="Product Interest" column_invisible="True"/>

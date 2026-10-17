@@ -88,7 +88,7 @@ if search_custom_views:
     print("SUCCESS: Updated Pipeline Search View ID:", search_custom_views[0])
 
 # 3. Update Clean Pipeline Tree View
-clean_tree_arch = """<list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" default_order="create_date desc, id desc" limit="1000">
+clean_tree_arch = """<list string="Opportunities" sample="1" multi_edit="1" decoration-muted="won_status == 'lost'" default_order="write_date desc, id desc" limit="1000">
     <header>
         <button name="723" type="action" string="Mark Lost"/>
         <button name="733" type="action" string="Email"/>

@@ -24,11 +24,12 @@ class CrmLead(models.Model):
 
     @api.model
     def web_read_group(self, domain, groupby, aggregates=(), limit=None, offset=0, order=None, **kwargs):
-        # When grouping by create_date (day, month, week, year), default order to descending (latest first)
+        # When grouping by create_date or write_date (day, month, week, year), default order to descending (latest first)
         # and expand limit to show all groups across all records (e.g. 597 days) without 80-limit cutoff
-        if groupby and any(isinstance(g, str) and 'create_date' in g for g in groupby):
+        if groupby and any(isinstance(g, str) and ('create_date' in g or 'write_date' in g) for g in groupby):
             if not order:
-                order = 'create_date desc'
+                target_field = [g for g in groupby if isinstance(g, str) and ('create_date' in g or 'write_date' in g)][0]
+                order = f"{target_field.split(':')[0]} desc"
             if not limit or limit == 80:
                 limit = 2000
             kwargs.setdefault('unfold_read_default_limit', 500)
@@ -39,9 +40,10 @@ class CrmLead(models.Model):
 
     @api.model
     def _read_group(self, domain, groupby=(), aggregates=(), having=(), offset=0, limit=None, order=None):
-        if groupby and any(isinstance(g, str) and 'create_date' in g for g in groupby):
+        if groupby and any(isinstance(g, str) and ('create_date' in g or 'write_date' in g) for g in groupby):
             if not order:
-                order = 'create_date desc'
+                target_field = [g for g in groupby if isinstance(g, str) and ('create_date' in g or 'write_date' in g)][0]
+                order = f"{target_field.split(':')[0]} desc"
             if not limit or limit == 80:
                 limit = 2000
         return super()._read_group(
