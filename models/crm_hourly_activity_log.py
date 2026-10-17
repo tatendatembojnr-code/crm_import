@@ -82,7 +82,16 @@ class CrmHourlyActivityLog(models.Model):
                     WHERE e.user_id IS NOT NULL AND e.lead_id IS NOT NULL
                 )
                 SELECT 
-                    ROW_NUMBER() OVER (ORDER BY eh.activity_date DESC, COUNT(DISTINCT eh.lead_id) DESC, eh.user_id ASC) AS id,
+                    ROW_NUMBER() OVER (ORDER BY eh.activity_date DESC, (
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 8 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 9 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 10 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 11 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 12 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 14 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 15 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 16 THEN eh.lead_id END)
+                    ) DESC, eh.user_id ASC) AS id,
                     eh.user_id AS user_id,
                     eh.activity_date AS activity_date,
                     COUNT(DISTINCT CASE WHEN eh.hour_val = 8 THEN eh.lead_id END) AS h08_09,
@@ -93,10 +102,29 @@ class CrmHourlyActivityLog(models.Model):
                     COUNT(DISTINCT CASE WHEN eh.hour_val = 14 THEN eh.lead_id END) AS h02_03,
                     COUNT(DISTINCT CASE WHEN eh.hour_val = 15 THEN eh.lead_id END) AS h03_04,
                     COUNT(DISTINCT CASE WHEN eh.hour_val = 16 THEN eh.lead_id END) AS h04_05,
-                    COUNT(DISTINCT eh.lead_id) AS total_count
+                    (
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 8 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 9 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 10 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 11 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 12 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 14 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 15 THEN eh.lead_id END) +
+                        COUNT(DISTINCT CASE WHEN eh.hour_val = 16 THEN eh.lead_id END)
+                    ) AS total_count
                 FROM events_with_hour eh
                 JOIN res_users u ON u.id = eh.user_id
                 WHERE u.active IS TRUE
                 GROUP BY eh.user_id, eh.activity_date
+                HAVING (
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 8 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 9 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 10 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 11 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 12 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 14 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 15 THEN eh.lead_id END) +
+                    COUNT(DISTINCT CASE WHEN eh.hour_val = 16 THEN eh.lead_id END)
+                ) > 0
             )
         """)
